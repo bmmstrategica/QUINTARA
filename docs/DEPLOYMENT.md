@@ -103,6 +103,13 @@ was written since); do this only with approval.
 - `MFA_ENCRYPTION_KEY`, `CALENDAR_SECRET` and `WHATSAPP_NUMBER_SECRET` must be backed up with the database: a backup
   without them cannot decrypt those columns.
 
+## Capacity
+
+The load test (`pnpm --filter @quintara/api load` against a staging database) gives a baseline: one API process
+handled about 550 requests per second with a 95th percentile under 160 ms at 50 members at once, on 4 shared cores.
+Run it against staging after each significant change and before launch. To run more than one API process, first move
+the rate limits to Redis.
+
 ## Monitoring
 
 - Uptime checks on `/ready` (API) and the three web addresses.

@@ -200,7 +200,8 @@ webhook (`POST /v1/payments/webhook`) is read as raw bytes and refused unless it
 the cookie CSRF check because it carries no session. A checkout's return address must be one of `WEB_ORIGINS`.
 Settling is exactly once under a row lock; money for something already paid or cancelled is refunded and audited.
 The test checkout page exists only with the test provider (never in production) and runs no script.
-**The admin console may use the camera** (`camera=(self)`), for scanning tickets at check-in; the web app may not.
+**Database connections** that drop (a restart, failover or terminated session) are handled by the pool and logged;
+before stage 3 one would have ended the API process. **The admin console may use the camera** (`camera=(self)`), for scanning tickets at check-in; the web app may not.
 
 **Dependencies.** The remaining `pnpm audit` advisories are in Expo's and Metro's build tools (`node-forge`,
 `braces`, `uuid` in `@expo/cli` and Metro) and in `decode-uri-component`, which expo-router uses on the device.

@@ -22,6 +22,7 @@ pnpm dev:mobile    # Expo: press i (iOS simulator) or a (Android), or scan the Q
 pnpm typecheck     # every package and app
 pnpm test          # mock tests, contract tests and security tests
 pnpm e2e           # browser journeys across the web app, admin console and API (Playwright)
+pnpm visual        # visual regression of the web app (add --update-snapshots to approve a change)
 ```
 
 To connect the web app to the API, copy `.env.example` to `apps/web/.env.local`.
@@ -855,3 +856,12 @@ Passcode fallback, and "Sign out" on the lock screen.
   The apps choose through `payThrough` in `app-core`.
 - **Tickets.** Confirmed bookings on the web show their ticket as a QR code; the admin Check-in page scans it with the
   camera where the browser can (Chrome, Edge), and takes the typed code everywhere.
+
+## PostgreSQL tests, load, visual regression and live messaging
+
+- `TEST_DATABASE_URL=postgres://… pnpm --filter @quintara/api test` adds races on a real PostgreSQL server;
+  `TEST_ALL_ON_POSTGRES=1` runs every API test there, each on a fresh database. `TEST_LOG=1` shows server errors.
+- `LOAD_DATABASE_URL=postgres://… pnpm --filter @quintara/api load`: throughput and latency percentiles under load.
+- `pnpm visual`: 40 web screenshots compared with `e2e/visual.spec.ts-snapshots/` (offline mock, frozen clock).
+- Messages and notifications on the web update while the page is open (`useLive` in `app-core`, quiet `refresh`), and
+  the header shows unread dots.

@@ -92,14 +92,17 @@ passed on the final code.
 
 ## 4. Quality assurance
 
-**Executed on the final code of stage 2 (9 November 2026):**
+**Executed on the final code of stage 3 (9 November 2026):**
 
 | Suite | Result |
 |---|---|
 | Type-check, 9 packages | passed |
-| API tests (unit, integration, security, contract) | **174 passed, 0 failed** (153 before this work) |
+| API tests (unit, integration, security, contract), in-memory | **174 passed, 0 failed**, 5 PostgreSQL-only races skipped (153 before this work) |
+| The same 179 API tests on **PostgreSQL 16** (fresh database each, 10 connections) | **179 passed, 0 failed** |
+| Load test on PostgreSQL 16 (50 members at once, 20 s) | 568 requests/s, p95 158 ms, 0 errors (150 at once: 530/s, p95 495 ms, 0 errors) |
+| Visual regression (40 screens, both themes, desktop and phone) | passed; deterministic across repeated runs |
 | Offline-mock client tests | 8 passed |
-| End-to-end browser journeys (Playwright, Chromium) | 8 passed |
+| End-to-end browser journeys (Playwright, Chromium) | 9 passed |
 | Production builds: web, admin, Maison | succeeded |
 | Migrations and first-run on PostgreSQL 16 | succeeded, idempotent |
 | API on its image's production-only dependencies | booted, `/ready` ok |
@@ -110,10 +113,11 @@ the database, past experiences being bookable, and sample data that had fallen i
 
 **Not done, stated plainly:**
 
-- *Visual regression against reference images*: no reference images exist. Changed screens were checked by eye in
-  screenshots at 1440px and 390px. A baseline could be recorded now (Playwright `toHaveScreenshot`) to guard future work.
-- *Performance and load tests*: not run. The bookings path locks the experience row, and the concurrency test runs
-  on a single in-memory connection; repeat both on PostgreSQL under load before launch.
+- *Visual regression*: there were no reference images from the original design, so the baseline is the web app as it
+  stands (reviewed by eye). It covers the web app, not the admin console or the shop, whose screens need the API's
+  data; and it is not yet blocking in CI until recorded on the CI runner.
+- *Load*: one API process on a 4-core machine shared with PostgreSQL and the load generator. Production figures
+  depend on the host; more than one API process needs the shared (Redis) rate limits first.
 - *Docker image build*: the Dockerfile's dependency step and runtime were verified outside Docker. A full `docker build`
   could not complete in this sandbox (its TLS proxy and BuildKit sessions); the CI job builds it.
 - *QÉRA against the live Anthropic API*: not called (no key here). The request shape follows the current SDK types.
@@ -140,6 +144,21 @@ With the payment provider to be chosen later, stage 2 built everything a provide
 `readWebhook` with the provider's signature scheme) and `refund`, passed in `server.ts`, plus its webhook pointed at
 `https://<api>/v1/payments/webhook`. Saved cards for automatic renewals (`saveCard`, charging by token) are a second,
 provider-specific step.
+
+## 4c. Stage 3: PostgreSQL, load, visual regression, live messaging
+
+- **Every API test on real PostgreSQL** (`TEST_ALL_ON_POSTGRES=1`) and five dedicated races (`TEST_DATABASE_URL`): last
+  seat among five members, ten Book presses, last Maison piece among five buyers, ten webhooks with ten return pages,
+  ten Pay presses. **This found a deadlock** I had introduced with the checkout: two simultaneous Pay requests could
+  take the booking and payment locks in opposite orders. Fixed in all three settle functions; CI now runs the suite
+  on PostgreSQL. It also found that a dropped database connection would have ended the API process; the pool now
+  handles it.
+- **Load test** (`pnpm --filter @quintara/api load`, also in CI with a 500 ms p95 budget): results in section 4.
+  Search is the costliest request (it gathers from every module); everything else stays near the median.
+- **Visual regression** (`pnpm visual`): 40 screenshots of the web app on fixed data with a frozen clock. A 0.2 rem
+  heading change fails it.
+- **Live messaging** on the web: open conversations, the message list, notifications and the header's unread dots
+  update while the page is visible, without a reload.
 
 ## 5. Security assessment
 
@@ -191,7 +210,8 @@ Statuses: **Tested** = implemented and tested. **Credentials** = implemented, aw
 | | Partner bookings confirmed by the partner, never assumed | Tested | existing |
 | Maison Quintara | Products, stock, member pricing, cart, guest orders, tracking | Tested | existing |
 | | Checkout payment | Partial | as membership payment |
-| Networking | Directory, connections, messages, blocking, reports | Tested | existing; the web screens refresh by link, not live (README) |
+| Networking | Directory, connections, messages, blocking, reports | Tested | existing |
+| | Live messages and unread indicators (web) | Tested | polling while visible (5–30 s); mobile refreshes when opened |
 | QÉRA | Rule-based model, tools, proposals, memory, briefs | Tested | existing |
 | | Claude as hosted model | Credentials | `ANTHROPIC_API_KEY`; tested offline only |
 | | WhatsApp | Credentials | six `WHATSAPP_*` settings |
@@ -201,7 +221,8 @@ Statuses: **Tested** = implemented and tested. **Credentials** = implemented, aw
 | | Audit log, staff activity, integrity check | Tested | existing |
 | | Content management (TV, home page, descriptions, questions) | Tested | existing |
 | Platform | Readiness probe, Dockerfile, CI, deployment guide | Tested | image build itself runs in CI |
-| | Visual regression, load tests | Not built | section 4 |
+| | Concurrency on PostgreSQL, load tests | Tested | stage 3 |
+| | Visual regression | Tested | web app; admin and shop not covered (section 4) |
 | | Production deployment | Blocked | needs approval, hosting accounts and DNS |
 
 ## 7. GitHub and approvals
