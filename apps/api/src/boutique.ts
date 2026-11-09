@@ -186,13 +186,15 @@ export async function prepareOrderPayment(db: Db, ctx: RequestContext, provider:
  */
 export async function settleOrderPayment(db: Db, provider: PaymentProvider, paymentId: string, providerPaymentId: string): Promise<Settlement> {
   const outcome = await db.tx(async (tx) => {
-    const payment = (await tx.query<{ user_id: string; order_id: string | null; amount_minor: string; status: string }>(
-      'SELECT user_id, order_id, amount_minor, status FROM payments WHERE id = $1 FOR UPDATE', [paymentId]))[0];
-    if (!payment?.order_id) throw notFound('This payment is not for an order.');
+    // Locks are always taken order first, then payment, as prepareOrderPayment takes them; the other order deadlocks.
+    const target = (await tx.query<{ order_id: string | null }>('SELECT order_id FROM payments WHERE id = $1', [paymentId]))[0];
+    if (!target?.order_id) throw notFound('This payment is not for an order.');
+    const order = (await tx.query<{ status: string; order_number: string }>('SELECT status, order_number FROM orders WHERE id = $1 FOR UPDATE', [target.order_id]))[0];
+    const payment = (await tx.query<{ user_id: string; order_id: string; amount_minor: string; status: string }>(
+      'SELECT user_id, order_id, amount_minor, status FROM payments WHERE id = $1 FOR UPDATE', [paymentId]))[0]!;
     const done = { userId: payment.user_id, orderId: payment.order_id };
     if (payment.status === 'paid') return { result: 'settled' as const, ...done };
     if (payment.status === 'refunded') return { result: 'refunded' as const, ...done };
-    const order = (await tx.query<{ status: string; order_number: string }>('SELECT status, order_number FROM orders WHERE id = $1 FOR UPDATE', [payment.order_id]))[0];
     await tx.query(`UPDATE payments SET status = 'paid', provider_payment_id = $2, paid_at = now(), failure_reason = NULL, updated_at = now() WHERE id = $1`, [paymentId, providerPaymentId]);
     if (order?.status !== 'awaiting_payment') return { result: 'refund' as const, ...done };
     await tx.query(`UPDATE orders SET status = 'paid', updated_at = now() WHERE id = $1`, [payment.order_id]);

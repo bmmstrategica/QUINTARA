@@ -295,7 +295,7 @@ test('experience payments: one charge however often it is asked, a declined card
     const before = s.payments.charges.length;
     const [a, b] = await Promise.all([daniel.payBooking(held.id), daniel.payBooking(held.id).catch((e) => e)]);
     assert.equal(a.status, 'confirmed');
-    assert.ok(b instanceof ApiError ? b.code === 'conflict' : b.status === 'confirmed');
+    assert.ok(b instanceof ApiError ? b.code === 'conflict' : b.status === 'confirmed', JSON.stringify(b instanceof ApiError ? { code: b.code, message: b.message } : b));
     assert.equal(s.payments.charges.length, before + 1);                         // charged once
     assert.equal(s.payments.charges.at(-1)?.amountMinor, aura.memberPriceMinor * 2);
     const rows = await s.db.query(`SELECT status, amount_minor FROM payments WHERE booking_id = $1 ORDER BY created_at`, [held.id]);

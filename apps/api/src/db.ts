@@ -22,6 +22,9 @@ export interface Db extends Queryable {
 
 export function createPostgresDb(connectionString: string): Db {
   const pool = new pg.Pool({ connectionString, max: 10 });
+  // A connection that drops while idle (the database restarting, failing over, or an administrator ending it) is
+  // reported here. Unhandled, it would end the whole process; the pool replaces the connection on the next query.
+  pool.on('error', (error) => { console.error(`PostgreSQL connection lost: ${error.message}`); });
   return {
     async query<T extends Row>(sql: string, params: unknown[] = []) {
       return (await pool.query(sql, params)).rows as T[];

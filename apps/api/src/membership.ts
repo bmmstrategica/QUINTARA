@@ -70,12 +70,14 @@ export async function prepareMembershipPayment(db: Db, ctx: RequestContext, prov
  */
 export async function settleMembershipPayment(db: Db, provider: PaymentProvider, paymentId: string, providerPaymentId: string): Promise<Settlement> {
   const outcome = await db.tx(async (tx) => {
-    const payment = (await tx.query<{ user_id: string; application_id: string | null; amount_minor: string; status: string }>(
-      'SELECT user_id, application_id, amount_minor, status FROM payments WHERE id = $1 FOR UPDATE', [paymentId]))[0];
-    if (!payment?.application_id) throw notFound('This payment is not for a membership.');
+    // Locks are always taken application first, then payment, so two settlements (or a staff change) cannot deadlock.
+    const target = (await tx.query<{ application_id: string | null }>('SELECT application_id FROM payments WHERE id = $1', [paymentId]))[0];
+    if (!target?.application_id) throw notFound('This payment is not for a membership.');
+    const application = (await tx.query<{ status: string }>('SELECT status FROM membership_applications WHERE id = $1 FOR UPDATE', [target.application_id]))[0];
+    const payment = (await tx.query<{ user_id: string; application_id: string; amount_minor: string; status: string }>(
+      'SELECT user_id, application_id, amount_minor, status FROM payments WHERE id = $1 FOR UPDATE', [paymentId]))[0]!;
     if (payment.status === 'paid') return { result: 'settled' as const, userId: payment.user_id };
     if (payment.status === 'refunded') return { result: 'refunded' as const, userId: payment.user_id };
-    const application = (await tx.query<{ status: string }>('SELECT status FROM membership_applications WHERE id = $1 FOR UPDATE', [payment.application_id]))[0];
     await tx.query(`UPDATE payments SET status = 'paid', provider_payment_id = $2, paid_at = now(), failure_reason = NULL, updated_at = now() WHERE id = $1`, [paymentId, providerPaymentId]);
     if (application?.status !== 'payment_pending') return { result: 'refund' as const, userId: payment.user_id };
     await audit(tx, payment.user_id, 'payment.paid', 'payment', paymentId, { purpose: 'membership', amountMinor: Number(payment.amount_minor) });

@@ -2,7 +2,7 @@ import { createHttpApi } from '@quintara/api-client';
 import type { QuintaraApi } from '@quintara/api-client';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.ts';
-import { createMemoryDb } from '../src/db.ts';
+import { createMemoryDb, createPostgresDb } from '../src/db.ts';
 import type { Db } from '../src/db.ts';
 import { migrate } from '../src/migrate.ts';
 import { MockEmailProvider } from '../src/email.ts';
@@ -30,15 +30,18 @@ export interface TestServer {
 }
 
 /** A real API on an in-memory PostgreSQL, called through the same HTTP client the apps use. */
-export async function startServer(overrides: Partial<import('../src/app.ts').AppConfig> = {}): Promise<TestServer> {
-  const db = createMemoryDb();
+export async function startServer(overrides: Partial<import('../src/app.ts').AppConfig> = {}, options: { db?: Db } = {}): Promise<TestServer> {
+  // An in-memory PostgreSQL by default; a real one when the test passes it (see freshPostgres), or for every test when
+  // TEST_ALL_ON_POSTGRES=1 (with TEST_DATABASE_URL), so the whole suite can be run on a real server.
+  const own = !options.db && process.env.TEST_ALL_ON_POSTGRES === '1' ? await freshPostgres() : null;
+  const db = options.db ?? own?.db ?? createMemoryDb();
   await migrate(db);
   await seed(db);
   const payments = new MockPaymentProvider();
   const email = new MockEmailProvider();
   const whatsapp = new MockWhatsAppProvider();
   const whatsappConfig: WhatsAppConfig = { provider: whatsapp, businessNumber: '+27 21 000 0000', verifyToken: 'test-verify-token', appSecret: 'test-app-secret', numberSecret: 'test-number-secret-of-at-least-32-chars', perMinute: 1000 };
-  const app = await buildApp(db, { webOrigins: ['http://localhost:3000'], authMode: 'dev', secureCookies: false, payments, email, webUrl: 'https://app.quintara.test', signInLimit: 1000, whatsapp: whatsappConfig, ...overrides });
+  const app = await buildApp(db, { webOrigins: ['http://localhost:3000'], authMode: 'dev', secureCookies: false, payments, email, webUrl: 'https://app.quintara.test', signInLimit: 1000, whatsapp: whatsappConfig, ...(process.env.TEST_LOG === '1' ? { logger: true } : {}), ...overrides });
   let seq = 0;
   const whatsappIn = async (from: string, message: { text?: string; button?: string; id?: string }) => {
     const m = message.button ? { type: 'interactive', interactive: { type: 'button_reply', button_reply: { id: message.button, title: 'x' } } } : { type: 'text', text: { body: message.text ?? '' } };
@@ -73,5 +76,20 @@ export async function startServer(overrides: Partial<import('../src/app.ts').App
     }) as typeof fetch;
     return createHttpApi({ baseUrl: 'http://api.test', fetchImpl });
   };
-  return { app, db, payments, email, staff, client, whatsapp, whatsappConfig, whatsappIn, close: async () => { await app.close(); await db.close(); } };
+  return { app, db, payments, email, staff, client, whatsapp, whatsappConfig, whatsappIn, close: async () => { await app.flushEmails(); await app.close(); await db.close(); await own?.drop(); } };
+}
+
+/**
+ * A new, empty database on the PostgreSQL server at TEST_DATABASE_URL, for tests that need real concurrency (the
+ * in-memory database has a single connection). Returns null when TEST_DATABASE_URL is not set. `drop` removes it.
+ */
+export async function freshPostgres(): Promise<{ db: Db; drop: () => Promise<void> } | null> {
+  const base = process.env.TEST_DATABASE_URL;
+  if (!base) return null;
+  const name = `quintara_test_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const admin = createPostgresDb(base);
+  await admin.exec(`CREATE DATABASE ${name}`);
+  const url = new URL(base); url.pathname = `/${name}`;
+  const db = createPostgresDb(url.toString());
+  return { db, drop: async () => { await admin.exec(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`); await admin.close(); } };
 }

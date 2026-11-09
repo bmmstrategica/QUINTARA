@@ -200,13 +200,15 @@ export async function prepareBookingPayment(db: Db, ctx: RequestContext, provide
  */
 export async function settleBookingPayment(db: Db, provider: PaymentProvider, paymentId: string, providerPaymentId: string): Promise<Settlement> {
   const outcome = await db.tx(async (tx) => {
-    const payment = (await tx.query<{ user_id: string; booking_id: string | null; amount_minor: string; status: string }>(
-      'SELECT user_id, booking_id, amount_minor, status FROM payments WHERE id = $1 FOR UPDATE', [paymentId]))[0];
-    if (!payment?.booking_id) throw notFound('This payment is not for a booking.');
+    // Locks are always taken booking first, then payment, as prepareBookingPayment takes them; the other order deadlocks.
+    const target = (await tx.query<{ booking_id: string | null }>('SELECT booking_id FROM payments WHERE id = $1', [paymentId]))[0];
+    if (!target?.booking_id) throw notFound('This payment is not for a booking.');
+    const booking = (await tx.query<{ status: BookingStatus; title: string }>(
+      'SELECT b.status, e.title FROM experience_bookings b JOIN experiences e ON e.id = b.experience_id WHERE b.id = $1 FOR UPDATE OF b', [target.booking_id]))[0];
+    const payment = (await tx.query<{ user_id: string; booking_id: string; amount_minor: string; status: string }>(
+      'SELECT user_id, booking_id, amount_minor, status FROM payments WHERE id = $1 FOR UPDATE', [paymentId]))[0]!;
     if (payment.status === 'paid') return { result: 'settled' as const, userId: payment.user_id };
     if (payment.status === 'refunded') return { result: 'refunded' as const, userId: payment.user_id };
-    const booking = (await tx.query<{ status: BookingStatus; title: string }>(
-      'SELECT b.status, e.title FROM experience_bookings b JOIN experiences e ON e.id = b.experience_id WHERE b.id = $1 FOR UPDATE OF b', [payment.booking_id]))[0];
     await tx.query(`UPDATE payments SET status = 'paid', provider_payment_id = $2, paid_at = now(), failure_reason = NULL, updated_at = now() WHERE id = $1`, [paymentId, providerPaymentId]);
     if (booking?.status !== 'awaiting_payment') return { result: 'refund' as const, userId: payment.user_id };
     await tx.query(`UPDATE experience_bookings SET status = 'confirmed', payment_due_at = NULL, updated_at = now() WHERE id = $1`, [payment.booking_id]);
