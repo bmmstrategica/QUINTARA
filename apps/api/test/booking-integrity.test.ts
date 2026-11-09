@@ -28,3 +28,14 @@ test('sample dates move forward by whole weeks, keeping the weekday and time, an
   // The earliest sample (11 October) lands at least a week ahead.
   assert.ok(Date.parse(sampleDate('2026-10-11T08:00:00Z', now)) >= now + 6 * 86_400_000);
 });
+
+test('readiness checks the database; liveness does not', async () => {
+  const s = await startServer();
+  try {
+    assert.deepEqual(JSON.parse((await s.app.inject({ method: 'GET', url: '/ready' })).body), { ok: true, database: 'ok' });
+    await s.db.close();
+    const down = await s.app.inject({ method: 'GET', url: '/ready' });
+    assert.equal(down.statusCode, 503);
+    assert.equal((await s.app.inject({ method: 'GET', url: '/health' })).statusCode, 200);
+  } finally { await s.app.close(); }
+});

@@ -181,6 +181,8 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
 
   app.decorateRequest('sessionToken', undefined);
   app.addHook('preHandler', async (request: FastifyRequest) => {
+    // The health probes carry no session and must not depend on one: liveness never touches the database.
+    if (request.url === '/health' || request.url === '/ready') return;
     const bearer = request.headers.authorization?.startsWith('Bearer ') ? request.headers.authorization.slice(7) : undefined;
     const staff = isStaffRoute(request.url);
     request.sessionToken = (staff ? request.cookies[STAFF_COOKIE] : request.cookies[SESSION_COOKIE]) ?? bearer;
@@ -207,7 +209,17 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
     return reply.status(500).send({ message: 'Something went wrong on our side. Please try again.', fields: {} });
   });
 
+  // Liveness: the process answers. Readiness: it can also reach the database (for load balancers and deploys).
   app.get('/health', async () => ({ ok: true }));
+  app.get('/ready', async (_request, reply) => {
+    try {
+      await db.query('SELECT 1');
+      return { ok: true, database: 'ok' };
+    } catch {
+      reply.code(503);
+      return { ok: false, database: 'unreachable' };
+    }
+  });
 
   // Email goes out after the reply has been sent, so mail never slows a request down.
   let delivering: Promise<unknown> | null = null;

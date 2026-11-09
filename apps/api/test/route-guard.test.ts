@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { startServer } from './harness.ts';
 
 const PUBLIC = new Set([
-  'GET /health', 'GET /v1/markets', 'GET /v1/content/sections', 'GET /v1/auth/config', 'GET /v1/auth/2fa', 'GET /admin/v1/auth/2fa',
+  'GET /health', 'GET /ready', 'GET /v1/markets', 'GET /v1/content/sections', 'GET /v1/auth/config', 'GET /v1/auth/2fa', 'GET /admin/v1/auth/2fa',
   'GET /v1/application/plans', 'GET /v1/application/questions', 'GET /v1/session', 'DELETE /v1/session', 'GET /v1/guest/account',
   'GET /admin/v1/session', 'DELETE /admin/v1/session',
   // Open shelves: what visitors may see, filtered to what they may see.

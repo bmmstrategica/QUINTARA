@@ -1,7 +1,18 @@
 /** Five admin console accounts, managed by administrators, and the audit log of everything they do. */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { ROLES, STAFF_ROLES } from '@quintara/domain';
 import { startServer } from './harness.ts';
+
+test('staff role keys never equal member role keys: both are stored in user_roles', async () => {
+  assert.deepEqual(STAFF_ROLES.filter((r) => (ROLES as readonly string[]).includes(r)), []);
+  const s = await startServer();
+  try {
+    const rows = await s.db.query<{ key: string; is_staff: boolean }>('SELECT key, is_staff FROM roles');
+    for (const role of STAFF_ROLES) assert.equal(rows.find((r) => r.key === role)?.is_staff, true, role);
+    for (const role of ROLES) assert.equal(rows.find((r) => r.key === role)?.is_staff, false, role);
+  } finally { await s.close(); }
+});
 
 test('admin console accounts: a fixed number of seats, roles, suspension, and never without an administrator', async () => {
   // Three sample accounts are seeded (administrator, concierge, content); six seats leave room for three more.
@@ -61,22 +72,22 @@ test('each staff role has the powers of its role and no more, checked by the ser
   const s = await startServer({ staffSeats: 12 });
   try {
     const admin = await s.staff('admin@example.com');
-    const people = { executive: 'exec', membership: 'members', experiences: 'events', finance: 'money', support: 'help' } as const;
+    const people = { executive_admin: 'exec', membership: 'members', experiences: 'events', finance: 'money', support: 'help' } as const;
     for (const [role, name] of Object.entries(people)) assert.equal((await admin('POST', '/admin/v1/staff', { fullName: `Staff ${name}`, email: `${name}@quintara.test`, role })).status, 200);
     const as = async (name: string) => s.staff(`${name}@quintara.test`);
     const status = async (who: Awaited<ReturnType<typeof as>>, url: string) => (await who('GET', url)).status;
     // [route, the roles that may open it]
     const matrix: [string, string[]][] = [
       ['/admin/v1/staff', []],
-      ['/admin/v1/applications', ['executive', 'membership']],
-      ['/admin/v1/members', ['executive', 'membership']],
-      ['/admin/v1/payments', ['executive', 'finance']],
-      ['/admin/v1/insights', ['executive', 'finance']],
-      ['/admin/v1/experiences', ['executive', 'experiences']],
+      ['/admin/v1/applications', ['executive_admin', 'membership']],
+      ['/admin/v1/members', ['executive_admin', 'membership']],
+      ['/admin/v1/payments', ['executive_admin', 'finance']],
+      ['/admin/v1/insights', ['executive_admin', 'finance']],
+      ['/admin/v1/experiences', ['executive_admin', 'experiences']],
       ['/admin/v1/concierge-requests', ['support']],
       ['/admin/v1/partners', []],
       ['/admin/v1/products', []],
-      ['/admin/v1/audit', ['executive', 'membership', 'experiences', 'finance', 'support']],
+      ['/admin/v1/audit', ['executive_admin', 'membership', 'experiences', 'finance', 'support']],
     ];
     for (const [role, name] of Object.entries(people)) {
       const who = await as(name);
@@ -90,6 +101,12 @@ test('each staff role has the powers of its role and no more, checked by the ser
     const finance = await as('money');
     assert.equal((await finance('GET', '/admin/v1/audit')).body.all, false);
     assert.equal((await (await as('exec'))('GET', '/admin/v1/audit')).body.all, true);
+    // A member's business role "executive" gives no console powers, even to someone who also has a console account.
+    const ids = Object.fromEntries((await admin('GET', '/admin/v1/staff')).body.staff.map((x: any) => [x.email, x.userId]));
+    await s.db.query(`INSERT INTO user_roles (user_id, role_key) VALUES ($1, 'executive')`, [ids['help@quintara.test']]);
+    const support = await s.staff('help@quintara.test');
+    assert.equal(await status(support, '/admin/v1/members'), 403);
+    assert.equal((await support('GET', '/admin/v1/audit')).body.all, false);
     // A role cannot be invented.
     assert.equal((await admin('POST', '/admin/v1/staff', { fullName: 'Someone Else', email: 'else@quintara.test', role: 'owner' })).status, 422);
   } finally { await s.close(); }

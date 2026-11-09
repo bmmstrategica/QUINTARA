@@ -81,9 +81,10 @@ export function can(session: Pick<Session, 'roles'> | null, permission: Permissi
 /**
  * Staff roles are separate from member roles: a staff account need not be a member. Each account has one role.
  * Role keys are stored in the database; `admin` is the Super Administrator and `concierge` the Concierge Manager
- * (the keys predate the full set of roles and are kept so stored accounts keep their meaning).
+ * (the keys predate the full set of roles and are kept so stored accounts keep their meaning). Staff keys must never
+ * equal a member role key (ROLES): both live in user_roles, and `executive` is already a member's business role.
  */
-export const STAFF_ROLES = ['admin', 'executive', 'membership', 'experiences', 'concierge', 'finance', 'content', 'support'] as const;
+export const STAFF_ROLES = ['admin', 'executive_admin', 'membership', 'experiences', 'concierge', 'finance', 'content', 'support'] as const;
 export type StaffRole = (typeof STAFF_ROLES)[number];
 
 export const STAFF_PERMISSIONS = [
@@ -118,7 +119,7 @@ export const STAFF_ROLE_PERMISSIONS: Readonly<Record<StaffRole, readonly StaffPe
   // Super Administrator: everything, including staff accounts, cities and the full audit log.
   admin: [...STAFF_PERMISSIONS],
   // Executive Administrator: runs the club day to day and sees the whole picture; does not manage staff or cities.
-  executive: ['admin.insights.view', 'admin.audit.view', 'admin.applications.review', 'admin.members.manage', 'admin.finance.manage', 'admin.business.manage', 'admin.experiences.manage', 'admin.bookings.manage'],
+  executive_admin: ['admin.insights.view', 'admin.audit.view', 'admin.applications.review', 'admin.members.manage', 'admin.finance.manage', 'admin.business.manage', 'admin.experiences.manage', 'admin.bookings.manage'],
   // Membership Manager: applications, the application form, members and their roles.
   membership: ['admin.applications.review', 'admin.members.manage'],
   // Experiences Manager: experiences, pricing and availability, guest lists, reservations and check-in.
@@ -134,13 +135,13 @@ export const STAFF_ROLE_PERMISSIONS: Readonly<Record<StaffRole, readonly StaffPe
 };
 
 export const STAFF_ROLE_LABELS: Readonly<Record<StaffRole, string>> = {
-  admin: 'Super Administrator', executive: 'Executive Administrator', membership: 'Membership Manager', experiences: 'Experiences Manager',
+  admin: 'Super Administrator', executive_admin: 'Executive Administrator', membership: 'Membership Manager', experiences: 'Experiences Manager',
   concierge: 'Concierge Manager', finance: 'Finance Manager', content: 'Content Manager', support: 'Support Administrator',
 };
 
 export const STAFF_ROLE_NOTES: Readonly<Record<StaffRole, string>> = {
   admin: 'Everything, including staff accounts, cities, money and the full audit log.',
-  executive: 'The dashboard and Insights, applications, members, money, Business, experiences and the full audit log. Not staff accounts or cities.',
+  executive_admin: 'The dashboard and Insights, applications, members, money, Business, experiences and the full audit log. Not staff accounts or cities.',
   membership: 'Applications, the application questions, members, their roles and member reports.',
   experiences: 'Experiences, pricing and availability, guest lists, reservations and check-in.',
   concierge: 'Concierge requests, service requests, partner bookings, partners and services, experiences, guest lists and check-in.',
