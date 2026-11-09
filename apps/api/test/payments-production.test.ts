@@ -31,7 +31,7 @@ test('with payments unavailable, a held booking cannot be paid, stays held, and 
     assert.equal(paid[0]!.n, 0);
     // The apps are told no test cards are on offer.
     const config = await server.app.inject({ method: 'GET', url: '/v1/payments/config' });
-    assert.deepEqual(JSON.parse(config.body), { provider: 'unavailable', testCards: false });
+    assert.deepEqual(JSON.parse(config.body), { provider: 'unavailable', testCards: false, checkout: 'direct' });
   } finally {
     await server.close();
   }

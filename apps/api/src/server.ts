@@ -99,8 +99,10 @@ else {
 }
 // Payments: simulated in development (and on a staging deployment, DEPLOY_ENV=staging). Production refuses payments
 // until a real provider's adapter is written and passed here (see payments.ts): it never marks anything paid without money.
-const payments = choosePaymentProvider({ production, deployEnv: env0('DEPLOY_ENV') });
-if (production && !takesRealPayments(payments)) console.warn(`Payments: ${payments.name}. No money can be taken until a payment provider is configured.`);
+// The test checkout sends members to a page on the API itself, so it needs the API's public address (API_URL).
+const apiUrl = env0('API_URL') || (production ? '' : `http://localhost:${process.env.PORT ?? 4000}`);
+const payments = choosePaymentProvider({ production, deployEnv: env0('DEPLOY_ENV'), mode: env0('PAYMENTS'), apiUrl, secret: env0('PAYMENTS_TEST_SECRET') });
+if (production && !takesRealPayments(payments)) console.warn(`Payments: ${payments.name}${payments.hosted ? ' (test checkout)' : ''}. No money can be taken until a payment provider is configured.`);
 
 // QÉRA's language model. With ANTHROPIC_API_KEY set, Claude answers (QERA_MODEL chooses the model; QERA_MODEL=rules keeps
 // the built-in rule-based model). The rule-based model always stands behind it, so QÉRA answers even if the API cannot

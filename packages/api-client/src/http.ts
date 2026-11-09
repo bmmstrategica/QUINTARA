@@ -214,6 +214,8 @@ export function createHttpApi(options: HttpApiOptions): QuintaraApi {
     sendTestPush: async () => { await request('POST', '/v1/me/push/test'); },
     getMembership: () => request('GET', '/v1/me/membership'),
     getPaymentConfig: () => request('GET', '/v1/payments/config'),
+    startCheckout: (input) => request('POST', '/v1/payments/checkout', input),
+    getCheckout: (paymentId) => request('GET', `/v1/payments/checkout/${encodeURIComponent(paymentId)}`),
     saveCard: (setupToken) => request('PUT', '/v1/me/membership/card', { setupToken }),
     removeCard: () => request('DELETE', '/v1/me/membership/card'),
     setAutoRenew: (autoRenew) => request('PUT', '/v1/me/membership/auto-renew', { autoRenew }),

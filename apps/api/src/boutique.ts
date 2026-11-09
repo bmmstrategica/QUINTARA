@@ -8,7 +8,8 @@ import type { RequestContext } from './context.ts';
 import type { Db, Queryable, Row } from './db.ts';
 import { conflict, HttpError, notFound, validation } from './errors.ts';
 import { refundPayment } from './experiences.ts';
-import type { PaymentProvider } from './payments.ts';
+import { markPaymentFailed } from './payments.ts';
+import type { PaymentProvider, PreparedPayment, Settlement } from './payments.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** An order that is never paid gives its stock back after this long. */
@@ -151,7 +152,8 @@ export async function createOrder(db: Db, ctx: RequestContext, defaultMarketId: 
 }
 
 /** Charges the order's total once, however often it is asked. */
-export async function payOrder(db: Db, ctx: RequestContext, provider: PaymentProvider, orderId: string): Promise<Order> {
+/** Sets the money aside for an unpaid order: a pending payment row, keyed by the order and the attempt. */
+export async function prepareOrderPayment(db: Db, ctx: RequestContext, provider: PaymentProvider, orderId: string): Promise<PreparedPayment> {
   requirePermission(ctx, 'boutique.shop');
   // Scoped to the buyer's own account, member or guest: anyone else's order is simply not found.
   const userId = ctx.userId;
@@ -172,28 +174,49 @@ export async function payOrder(db: Db, ctx: RequestContext, provider: PaymentPro
     const paymentId = (await tx.query<{ id: string }>(
       `INSERT INTO payments (user_id, market_id, purpose, order_id, amount_minor, currency_code, provider, idempotency_key) VALUES ($1, $2, 'boutique', $3, $4, $5, $6, $7)
        ON CONFLICT (idempotency_key) DO UPDATE SET updated_at = now() RETURNING id`, [userId, order.market_id, orderId, amount, currency, provider.name, key]))[0]!.id;
-    return { key, amount, currency, paymentId, number: order.order_number as string };
+    return { key, amount, currency, paymentId, description: `Maison Quintara order ${order.order_number as string}`, userId };
   });
   if (!prepared) throw conflict('This order was held for too long without payment. Please order again.');
+  return prepared;
+}
 
-  const result = await provider.charge({ amountMinor: prepared.amount, currency: prepared.currency, description: `Maison Quintara order ${prepared.number}`, idempotencyKey: prepared.key, customerReference: userId });
+/**
+ * Records that an order's payment came in. Exactly once; a repeat changes nothing. If the order was cancelled
+ * meanwhile, or already paid by another payment, this money is refunded and the refund recorded on the order.
+ */
+export async function settleOrderPayment(db: Db, provider: PaymentProvider, paymentId: string, providerPaymentId: string): Promise<Settlement> {
+  const outcome = await db.tx(async (tx) => {
+    const payment = (await tx.query<{ user_id: string; order_id: string | null; amount_minor: string; status: string }>(
+      'SELECT user_id, order_id, amount_minor, status FROM payments WHERE id = $1 FOR UPDATE', [paymentId]))[0];
+    if (!payment?.order_id) throw notFound('This payment is not for an order.');
+    const done = { userId: payment.user_id, orderId: payment.order_id };
+    if (payment.status === 'paid') return { result: 'settled' as const, ...done };
+    if (payment.status === 'refunded') return { result: 'refunded' as const, ...done };
+    const order = (await tx.query<{ status: string; order_number: string }>('SELECT status, order_number FROM orders WHERE id = $1 FOR UPDATE', [payment.order_id]))[0];
+    await tx.query(`UPDATE payments SET status = 'paid', provider_payment_id = $2, paid_at = now(), failure_reason = NULL, updated_at = now() WHERE id = $1`, [paymentId, providerPaymentId]);
+    if (order?.status !== 'awaiting_payment') return { result: 'refund' as const, ...done };
+    await tx.query(`UPDATE orders SET status = 'paid', updated_at = now() WHERE id = $1`, [payment.order_id]);
+    await recordEvent(tx, payment.order_id, 'paid', payment.user_id);
+    await tx.query(`INSERT INTO notifications (user_id, category, title) VALUES ($1, 'order', $2)`, [payment.user_id, `Thank you. Order ${order.order_number} is paid and will be prepared for delivery.`]);
+    await audit(tx, payment.user_id, 'payment.paid', 'payment', paymentId, { purpose: 'boutique', amountMinor: Number(payment.amount_minor), orderId: payment.order_id });
+    return { result: 'settled' as const, ...done };
+  });
+  if (outcome.result !== 'refund') return outcome.result;
+  await refundPayment(db, provider, outcome.userId, paymentId);
+  await recordRefund(db, outcome.orderId, paymentId, outcome.userId);
+  return 'refunded';
+}
+
+/** Pays an order by charging the provider directly (simulated payments). Hosted providers use a checkout instead. */
+export async function payOrder(db: Db, ctx: RequestContext, provider: PaymentProvider, orderId: string): Promise<Order> {
+  if (provider.hosted) throw conflict('Please pay through the secure checkout.');
+  const prepared = await prepareOrderPayment(db, ctx, provider, orderId);
+  const result = await provider.charge({ amountMinor: prepared.amount, currency: prepared.currency, description: prepared.description, idempotencyKey: prepared.key, customerReference: prepared.userId });
   if (result.status === 'failed') {
-    await db.query(`UPDATE payments SET status = 'failed', failure_reason = $2, updated_at = now() WHERE id = $1`, [prepared.paymentId, result.reason]);
+    await markPaymentFailed(db, prepared.paymentId, result.reason);
     throw new HttpError(402, `The payment did not go through. ${result.reason}`);
   }
-  const paid = await db.tx(async (tx) => {
-    const current = await tx.query<{ status: string }>('SELECT status FROM orders WHERE id = $1 FOR UPDATE', [orderId]);
-    await tx.query(`UPDATE payments SET status = 'paid', provider_payment_id = $2, paid_at = COALESCE(paid_at, now()), updated_at = now() WHERE id = $1 AND status <> 'refunded'`, [prepared.paymentId, result.providerPaymentId]);
-    if (current[0]?.status !== 'awaiting_payment') return current[0]?.status !== 'cancelled';
-    await tx.query(`UPDATE orders SET status = 'paid', updated_at = now() WHERE id = $1`, [orderId]);
-    await recordEvent(tx, orderId, 'paid', userId);
-    await tx.query(`INSERT INTO notifications (user_id, category, title) VALUES ($1, 'order', $2)`, [userId, `Thank you. Order ${prepared.number} is paid and will be prepared for delivery.`]);
-    await audit(tx, userId, 'payment.paid', 'payment', prepared.paymentId, { purpose: 'boutique', amountMinor: prepared.amount, orderId });
-    return true;
-  });
-  if (!paid) {
-    await refundPayment(db, provider, userId, prepared.paymentId);
-    await recordRefund(db, orderId, prepared.paymentId, userId);
+  if ((await settleOrderPayment(db, provider, prepared.paymentId, result.providerPaymentId)) === 'refunded') {
     throw conflict('This order was cancelled before the payment finished. You have been refunded.');
   }
   return toOrder((await db.query(`${SELECT_ORDER} WHERE o.id = $1`, [orderId]))[0]!);

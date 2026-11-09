@@ -1484,6 +1484,23 @@ export function sectionText(list: readonly SectionCopy[] | undefined, key: Secti
 export * from './qera.ts';
 export * from './whatsapp.ts';
 
+/* ---------- Paying through a hosted checkout ---------- */
+
+/** What a checkout can pay for. */
+export type CheckoutPurpose = 'experience' | 'boutique' | 'membership';
+/** How a payment through a checkout stands, as the member's return page sees it. */
+export interface CheckoutStatus {
+  paymentId: string;
+  status: 'pending' | 'paid' | 'failed' | 'refunded';
+  purpose: CheckoutPurpose;
+  /** The booking, order or application paid for. */
+  targetId: string | null;
+  /** Why it failed, in words for the member. */
+  reason: string | null;
+}
+/** How the apps take payment: directly (simulated) or by sending the member to the provider's hosted checkout. */
+export interface PaymentConfig { provider: string; testCards: boolean; checkout: 'hosted' | 'direct' }
+
 /* ---------- Sample data ---------- */
 
 const SAMPLE_BASE = Date.parse('2026-10-11T00:00:00Z');

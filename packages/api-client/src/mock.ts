@@ -1203,7 +1203,10 @@ export function createMockApi(options: MockApiOptions = {}): QuintaraApi {
     }),
 
     getMembership: () => call(() => membershipStatus()),
-    getPaymentConfig: () => call(() => ({ provider: 'mock', testCards: true })),
+    getPaymentConfig: () => call(() => ({ provider: 'mock', testCards: true, checkout: 'direct' as const })),
+    // The offline mock charges at once, like the simulated provider; there is no checkout page to go to.
+    startCheckout: () => call(() => { throw new ApiError('conflict', 'Payments are taken directly here, not through a checkout.'); }),
+    getCheckout: () => call(() => { throw new ApiError('not_found', 'This payment is not available.'); }),
     saveCard: (setupToken) => call(() => {
       membershipOwner();
       const parsed = paymentMethodInputSchema.safeParse({ setupToken });

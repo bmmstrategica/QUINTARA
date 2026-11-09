@@ -4,7 +4,8 @@ import type { Booking, BookingStatus, Experience } from '@quintara/domain';
 import { audit, requireMember, requirePermission } from './context.ts';
 import type { RequestContext } from './context.ts';
 import type { Db, Queryable, Row } from './db.ts';
-import type { PaymentProvider } from './payments.ts';
+import { markPaymentFailed } from './payments.ts';
+import type { PaymentProvider, PreparedPayment, Settlement } from './payments.ts';
 import { conflict, forbidden, HttpError, notFound } from './errors.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -153,7 +154,11 @@ export async function listBookings(db: Queryable, ctx: RequestContext): Promise<
  * Pays for held seats and confirms the booking. The card never reaches Quintara: the provider charges it.
  * The charge happens between two short transactions so no database lock is held during the network call.
  */
-export async function payBooking(db: Db, ctx: RequestContext, provider: PaymentProvider, bookingId: string): Promise<Booking> {
+/**
+ * Sets the money aside for a held booking: a pending payment row, keyed by the booking and the attempt. The seats are
+ * kept for `holdMinutes` more while the member pays (a hosted checkout needs longer than a direct charge).
+ */
+export async function prepareBookingPayment(db: Db, ctx: RequestContext, provider: PaymentProvider, bookingId: string, holdMinutes = 5): Promise<PreparedPayment> {
   const session = requireMember(ctx, 'experiences.book');
   const prepared = await db.tx(async (tx) => {
     const rows = UUID.test(bookingId)
@@ -169,8 +174,8 @@ export async function payBooking(db: Db, ctx: RequestContext, provider: PaymentP
       await audit(tx, session.userId, 'booking.hold_lapsed', 'experience_booking', bookingId);
       return null;
     }
-    // Keep the seats for the few moments the charge takes, even if the hold was about to end.
-    await tx.query(`UPDATE experience_bookings SET payment_due_at = GREATEST(payment_due_at, now() + interval '5 minutes') WHERE id = $1`, [bookingId]);
+    // Keep the seats while the member pays, even if the hold was about to end.
+    await tx.query(`UPDATE experience_bookings SET payment_due_at = GREATEST(payment_due_at, now() + make_interval(mins => $2)) WHERE id = $1`, [bookingId, holdMinutes]);
     const failed = Number((await tx.query<{ n: string }>(`SELECT count(*) AS n FROM payments WHERE booking_id = $1 AND status = 'failed'`, [bookingId]))[0]!.n);
     // The key comes from the booking itself, not from the caller, so two tabs or a double click
     // can only ever produce one charge. It moves on only after a declined attempt.
@@ -182,27 +187,48 @@ export async function payBooking(db: Db, ctx: RequestContext, provider: PaymentP
        ON CONFLICT (idempotency_key) DO UPDATE SET updated_at = now() RETURNING id, status, booking_id`,
       [session.userId, booking.market_id, bookingId, amount, currency, provider.name, key]))[0]!;
     if (payment.booking_id !== bookingId) throw conflict('That payment reference belongs to something else.');
-    return { key, amount, currency, title: booking.title, paymentId: payment.id };
+    return { key, amount, currency, description: booking.title, paymentId: payment.id, userId: session.userId };
   });
   if (!prepared) throw conflict('The hold on your seats has ended. Please book again.');
+  return prepared;
+}
 
-  const result = await provider.charge({ amountMinor: prepared.amount, currency: prepared.currency, description: prepared.title, idempotencyKey: prepared.key, customerReference: session.userId });
+/**
+ * Records that a booking's payment came in and confirms the seats. Exactly once: a repeat (a second webhook, the
+ * member's return page) finds the payment already settled and changes nothing. If the booking was cancelled
+ * meanwhile, or already paid by another payment, this money is refunded.
+ */
+export async function settleBookingPayment(db: Db, provider: PaymentProvider, paymentId: string, providerPaymentId: string): Promise<Settlement> {
+  const outcome = await db.tx(async (tx) => {
+    const payment = (await tx.query<{ user_id: string; booking_id: string | null; amount_minor: string; status: string }>(
+      'SELECT user_id, booking_id, amount_minor, status FROM payments WHERE id = $1 FOR UPDATE', [paymentId]))[0];
+    if (!payment?.booking_id) throw notFound('This payment is not for a booking.');
+    if (payment.status === 'paid') return { result: 'settled' as const, userId: payment.user_id };
+    if (payment.status === 'refunded') return { result: 'refunded' as const, userId: payment.user_id };
+    const booking = (await tx.query<{ status: BookingStatus; title: string }>(
+      'SELECT b.status, e.title FROM experience_bookings b JOIN experiences e ON e.id = b.experience_id WHERE b.id = $1 FOR UPDATE OF b', [payment.booking_id]))[0];
+    await tx.query(`UPDATE payments SET status = 'paid', provider_payment_id = $2, paid_at = now(), failure_reason = NULL, updated_at = now() WHERE id = $1`, [paymentId, providerPaymentId]);
+    if (booking?.status !== 'awaiting_payment') return { result: 'refund' as const, userId: payment.user_id };
+    await tx.query(`UPDATE experience_bookings SET status = 'confirmed', payment_due_at = NULL, updated_at = now() WHERE id = $1`, [payment.booking_id]);
+    await tx.query(`INSERT INTO notifications (user_id, category, title, link) VALUES ($1, 'booking_confirmation', $2, $3::jsonb)`, [payment.user_id, `Your place at ${booking.title} is confirmed.`, JSON.stringify({ type: 'booking', id: payment.booking_id })]);
+    await audit(tx, payment.user_id, 'payment.paid', 'payment', paymentId, { purpose: 'experience', amountMinor: Number(payment.amount_minor), bookingId: payment.booking_id });
+    return { result: 'settled' as const, userId: payment.user_id };
+  });
+  if (outcome.result !== 'refund') return outcome.result;
+  await refundPayment(db, provider, outcome.userId, paymentId);
+  return 'refunded';
+}
+
+/** Pays a held booking by charging the provider directly (simulated payments). Hosted providers use a checkout instead. */
+export async function payBooking(db: Db, ctx: RequestContext, provider: PaymentProvider, bookingId: string): Promise<Booking> {
+  if (provider.hosted) throw conflict('Please pay through the secure checkout.');
+  const prepared = await prepareBookingPayment(db, ctx, provider, bookingId);
+  const result = await provider.charge({ amountMinor: prepared.amount, currency: prepared.currency, description: prepared.description, idempotencyKey: prepared.key, customerReference: prepared.userId });
   if (result.status === 'failed') {
-    await db.query(`UPDATE payments SET status = 'failed', failure_reason = $2, updated_at = now() WHERE id = $1`, [prepared.paymentId, result.reason]);
+    await markPaymentFailed(db, prepared.paymentId, result.reason);
     throw new HttpError(402, `The payment did not go through. ${result.reason}`);
   }
-  const confirmed = await db.tx(async (tx) => {
-    const current = await tx.query<{ status: BookingStatus }>('SELECT status FROM experience_bookings WHERE id = $1 FOR UPDATE', [bookingId]);
-    await tx.query(`UPDATE payments SET status = 'paid', provider_payment_id = $2, paid_at = COALESCE(paid_at, now()), updated_at = now() WHERE id = $1 AND status <> 'refunded'`, [prepared.paymentId, result.providerPaymentId]);
-    if (current[0]?.status === 'confirmed') return true;                 // a repeat of a request that already succeeded
-    if (current[0]?.status !== 'awaiting_payment') return false;         // cancelled while the charge was in flight
-    await tx.query(`UPDATE experience_bookings SET status = 'confirmed', payment_due_at = NULL, updated_at = now() WHERE id = $1`, [bookingId]);
-    await tx.query(`INSERT INTO notifications (user_id, category, title, link) VALUES ($1, 'booking_confirmation', $2, $3::jsonb)`, [session.userId, `Your place at ${prepared.title} is confirmed.`, JSON.stringify({ type: 'booking', id: bookingId })]);
-    await audit(tx, session.userId, 'payment.paid', 'payment', prepared.paymentId, { purpose: 'experience', amountMinor: prepared.amount, bookingId });
-    return true;
-  });
-  if (!confirmed) {
-    await refundPayment(db, provider, session.userId, prepared.paymentId);
+  if ((await settleBookingPayment(db, provider, prepared.paymentId, result.providerPaymentId)) === 'refunded') {
     throw conflict('This booking was cancelled before the payment finished. You have been refunded.');
   }
   return toBooking((await db.query(`${SELECT_BOOKING} WHERE b.id = $1`, [bookingId]))[0]!);

@@ -8,6 +8,9 @@
  */
 import type {
   AppNotification,
+  CheckoutPurpose,
+  CheckoutStatus,
+  PaymentConfig,
   ConciergeRequest,
   ConciergeRequestInput,
   Conversation,
@@ -292,8 +295,15 @@ export interface QuintaraApi {
 
   // Membership: term, renewal and the saved card. Open to a lapsed member, so they can renew.
   getMembership(): Promise<MembershipStatus>;
-  /** The payment provider, and whether the test cards are offered (only while payments are the stand-in). */
-  getPaymentConfig(): Promise<{ provider: string; testCards: boolean }>;
+  /** The payment provider, whether the test cards are offered, and whether payments go through a hosted checkout. */
+  getPaymentConfig(): Promise<PaymentConfig>;
+  /**
+   * Starts paying for a held booking, an order or the membership fee through the provider's hosted checkout. Send the
+   * member to `url`; they come back to `returnUrl` with `?payment=<paymentId>`.
+   */
+  startCheckout(input: { purpose: CheckoutPurpose; id?: string; returnUrl: string }): Promise<{ paymentId: string; url: string }>;
+  /** How a checkout payment stands. Asks the provider if its webhook has not arrived yet. */
+  getCheckout(paymentId: string): Promise<CheckoutStatus>;
   /** Saves the card from the payment provider's secure form, by its one-time setup token. */
   saveCard(setupToken: string): Promise<MembershipStatus>;
   removeCard(): Promise<MembershipStatus>;

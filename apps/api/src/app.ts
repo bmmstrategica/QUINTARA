@@ -34,13 +34,15 @@ import * as push from './push.ts';
 import * as renewals from './renewals.ts';
 import * as insights from './insights.ts';
 import { getDashboard } from './dashboard.ts';
+import * as checkout from './checkout.ts';
+import { TestCheckoutProvider } from './payments.ts';
 import * as partners from './partners.ts';
 import { deliverEmails } from './email.ts';
 import * as partnerBookings from './partner-bookings.ts';
 import * as guests from './guests.ts';
 import * as markets from './markets.ts';
 import * as content from './content.ts';
-import { MARKET_HEADER } from '@quintara/domain';
+import { formatMoney, MARKET_HEADER } from '@quintara/domain';
 import * as chief from './chief.ts';
 import type { EmailProvider } from './email.ts';
 import { RuleBasedQeraModel } from '@quintara/domain';
@@ -162,7 +164,9 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
     reply.header('x-content-type-options', 'nosniff').header('x-frame-options', 'DENY').header('referrer-policy', 'no-referrer')
       .header('cross-origin-opener-policy', 'same-origin').header('x-permitted-cross-domain-policies', 'none');
     if (config.secureCookies) reply.header('strict-transport-security', 'max-age=63072000; includeSubDomains; preload');
-    if (!request.url.startsWith('/v1/media/')) reply.header('cache-control', 'no-store').header('content-security-policy', "default-src 'none'; frame-ancestors 'none'");
+    // The test checkout's page (development and staging) needs its own inline styles; it runs no script.
+    const csp = request.url.startsWith('/v1/payments/test-checkout/') ? "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'" : "default-src 'none'; frame-ancestors 'none'";
+    if (!request.url.startsWith('/v1/media/')) reply.header('cache-control', 'no-store').header('content-security-policy', csp);
     return payload;
   });
 
@@ -174,6 +178,7 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
     requestInfo.enterWith({ ip: request.ip, userAgent: String(request.headers['user-agent'] ?? '').slice(0, 200) });
     if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') return;
     if (request.url.startsWith('/v1/whatsapp/webhook')) return;   // signed by Meta, checked on its own route
+    if (request.url.startsWith('/v1/payments/webhook')) return;   // signed by the payment provider, checked on its own route
     const origin = request.headers.origin, site = request.headers['sec-fetch-site'];
     if (origin && origin !== 'null' && !allowedOrigins.has(origin)) throw new HttpError(403, 'This request did not come from a Quintara app.');
     if ((origin === 'null' || site === 'cross-site') && (request.cookies?.[SESSION_COOKIE] || request.cookies?.[STAFF_COOKIE])) throw new HttpError(403, 'This request did not come from a Quintara app.');
@@ -504,6 +509,19 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   app.get('/v1/me/whatsapp', (request) => whatsapp.getWhatsApp(db, request.ctx, whatsappConfig));
   app.post('/v1/me/whatsapp', (request) => whatsapp.startWhatsAppLink(db, request.ctx, whatsappConfig, request.body));
   app.delete('/v1/me/whatsapp', (request, reply) => noContent(whatsapp.unlinkWhatsApp(db, request.ctx), reply));
+  // The payment provider's webhook. Its own scope reads the body as raw bytes, so the signature is checked on exactly
+  // what was sent. Any provider's content type is accepted; nothing is read until the signature holds.
+  await app.register(async (scope) => {
+    scope.removeAllContentTypeParsers();
+    scope.addContentTypeParser('*', { parseAs: 'buffer', bodyLimit: 256 * 1024 }, (_request, body, done) => done(null, body));
+    scope.post('/v1/payments/webhook', async (request, reply) => {
+      const raw = request.body as Buffer;
+      if (!Buffer.isBuffer(raw)) throw new HttpError(400, 'That request could not be read.');
+      await checkout.handleCheckoutWebhook(db, config.payments, raw, request.headers as Record<string, string | string[] | undefined>);
+      return reply.status(200).send({ received: true });
+    });
+  });
+
   // Meta's webhook. Its own scope reads the body as raw bytes, so the signature is checked on exactly what was sent.
   let whatsappWork: Promise<void> = Promise.resolve();
   app.decorate('flushWhatsApp', async () => { await whatsappWork; });
@@ -615,7 +633,25 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   // Membership: the term, renewal and the saved card. Also open to a lapsed member, so they can renew.
   app.get('/v1/me/membership', (request) => renewals.getMembership(db, request.ctx));
   // Which card form the apps show: the provider's own secure form, or the test cards while payments are the stand-in.
-  app.get('/v1/payments/config', async () => ({ provider: config.payments.name, testCards: config.payments.name === 'mock' }));
+  app.get('/v1/payments/config', async () => ({ provider: config.payments.name, testCards: config.payments.name === 'mock', checkout: config.payments.hosted ? 'hosted' : 'direct' }));
+  // Paying through the provider's hosted checkout (checkout.ts): start, then ask how it stands on the way back.
+  app.post('/v1/payments/checkout', (request) => checkout.startCheckout(db, request.ctx, config.payments, allowedOrigins, request.body));
+  app.get<{ Params: { id: string } }>('/v1/payments/checkout/:id', (request) => checkout.getCheckout(db, request.ctx, config.payments, request.params.id));
+  // The test checkout's own page and its Pay and Decline links. Development and staging only (TestCheckoutProvider).
+  app.get<{ Params: { ref: string } }>('/v1/payments/test-checkout/:ref', async (request, reply) => {
+    const provider = config.payments;
+    const found = provider instanceof TestCheckoutProvider ? provider.checkouts.get(request.params.ref) : undefined;
+    if (!found) throw new HttpError(404, 'This checkout does not exist.');
+    return reply.type('text/html; charset=utf-8').send(checkout.testCheckoutPage(request.params.ref, formatMoney(found.request.amountMinor, found.request.currency), found.request.description));
+  });
+  app.get<{ Params: { ref: string }; Querystring: { outcome?: string } }>('/v1/payments/test-checkout/:ref/complete', async (request, reply) => {
+    const provider = config.payments;
+    const done = provider instanceof TestCheckoutProvider ? provider.complete(request.params.ref, request.query.outcome === 'paid' ? 'paid' : 'declined') : null;
+    if (!done) throw new HttpError(404, 'This checkout does not exist.');
+    // Delivered as a real provider would deliver it: a signed webhook, checked by the same code.
+    await checkout.handleCheckoutWebhook(db, provider, Buffer.from(done.body), { 'x-test-checkout-signature': done.signature });
+    return reply.redirect(done.returnUrl, 303);
+  });
   app.put('/v1/me/membership/card', (request) => renewals.savePaymentMethod(db, request.ctx, config.payments, request.body));
   app.delete('/v1/me/membership/card', (request) => renewals.removePaymentMethod(db, request.ctx, config.payments));
   app.put('/v1/me/membership/auto-renew', (request) => renewals.setAutoRenew(db, request.ctx, request.body));
