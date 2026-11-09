@@ -2,6 +2,7 @@
  * Development and test data. The same placeholder content as the mock API,
  * so the apps look identical whichever one they talk to. Never run against production.
  */
+import { sampleDate } from '@quintara/domain';
 import { addDefaultPlans } from './application-form.ts';
 import type { Db } from './db.ts';
 
@@ -75,7 +76,7 @@ export async function seed(db: Db, options: { history?: boolean } = {}): Promise
       experience[key] = await one(
         `INSERT INTO experiences (market_id, title, category, summary, description, starts_at, timezone, venue_name, area, dress_code, host, programme, included, capacity, seats_held, price_minor, member_price_minor, currency_code, admission, is_hidden, guest_policy, max_seats_per_booking, status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17, 'ZAR', $18, $19, $20, $21, 'published') RETURNING id`,
-        [market, title, category, summary, description, startsAt, ZONE, venue, area, dress, host, JSON.stringify(programme.map(([time, item]) => ({ time, title: item }))), JSON.stringify(included), capacity, held, price, memberPrice, admission, hidden, guests, maxSeats],
+        [market, title, category, summary, description, sampleDate(startsAt), ZONE, venue, area, dress, host, JSON.stringify(programme.map(([time, item]) => ({ time, title: item }))), JSON.stringify(included), capacity, held, price, memberPrice, admission, hidden, guests, maxSeats],
       );
     }
     // Guests see the experiences with open booking until staff choose otherwise.
@@ -200,7 +201,7 @@ export async function seed(db: Db, options: { history?: boolean } = {}): Promise
       ['Founders Breakfast', 'Networking', 'An early table for founders and the people who back them.', '2026-11-06T05:30:00Z', 'A private dining room', 'Rosebank', 24, 0, 'open', true],
     ] as const) {
       await tx.query(`INSERT INTO experiences (market_id, title, category, summary, description, starts_at, timezone, venue_name, area, dress_code, host, programme, included, capacity, seats_held, price_minor, member_price_minor, currency_code, admission, is_hidden, guest_policy, max_seats_per_booking, status, open_to_guests)
-        VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8, 'Smart', 'Quintara', '[]'::jsonb, '[]'::jsonb, $9, 0, $10, $10, 'ZAR', $11, false, 'One guest per member.', 2, 'published', $12)`, [joburg, title, category, summary, startsAt, ZONE, venue, area, capacity, price, admission, open]);
+        VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8, 'Smart', 'Quintara', '[]'::jsonb, '[]'::jsonb, $9, 0, $10, $10, 'ZAR', $11, false, 'One guest per member.', 2, 'published', $12)`, [joburg, title, category, summary, sampleDate(startsAt), ZONE, venue, area, capacity, price, admission, open]);
     }
     for (const [name, category, summary, area, privilege] of [
       ['Marula House', 'Dining', 'Seasonal Highveld cooking in a Parkhurst garden.', 'Parkhurst', 'A glass of something from the cellar with dinner'],

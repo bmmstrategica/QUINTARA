@@ -7,6 +7,7 @@
  * All names, venues, dates and prices below are placeholder content.
  */
 import {
+  sampleDate,
   applicationSchema,
   can,
   conciergeRequestSchema,
@@ -61,10 +62,10 @@ type MemberSeed = Omit<MemberProfile, 'connection' | 'avatarPath'>;
 
 const JOBURG_EXPERIENCES: ExperienceSeed[] = [
   { id: 'exp-rooftop-supper', marketId: JOBURG, title: 'The Rooftop Supper', category: 'Fine dining', summary: 'A long table above the city, and a chef cooking for thirty.', description: 'A long table above the city, and a chef cooking for thirty.',
-    startsAt: '2026-10-24T16:30:00Z', timezone: ZONE, venueName: 'A private rooftop', area: 'Sandton', dressCode: 'Smart', host: 'Quintara', programme: [], included: [],
+    startsAt: sampleDate('2026-10-24T16:30:00Z'), timezone: ZONE, venueName: 'A private rooftop', area: 'Sandton', dressCode: 'Smart', host: 'Quintara', programme: [], included: [],
     capacity: 30, baseSeatsTaken: 0, priceMinor: 180000, memberPriceMinor: 180000, currency: 'ZAR', admission: 'members_only', guestPolicy: 'One guest per member.', maxSeatsPerBooking: 2, hidden: false, invitedMemberIds: [], openToGuests: false },
   { id: 'exp-founders-breakfast', marketId: JOBURG, title: 'Founders Breakfast', category: 'Networking', summary: 'An early table for founders and the people who back them.', description: 'An early table for founders and the people who back them.',
-    startsAt: '2026-11-06T05:30:00Z', timezone: ZONE, venueName: 'A private dining room', area: 'Rosebank', dressCode: 'Smart', host: 'Quintara', programme: [], included: [],
+    startsAt: sampleDate('2026-11-06T05:30:00Z'), timezone: ZONE, venueName: 'A private dining room', area: 'Rosebank', dressCode: 'Smart', host: 'Quintara', programme: [], included: [],
     capacity: 24, baseSeatsTaken: 0, priceMinor: 0, memberPriceMinor: 0, currency: 'ZAR', admission: 'open', guestPolicy: 'One guest per member.', maxSeatsPerBooking: 2, hidden: false, invitedMemberIds: [], openToGuests: true },
 ];
 const EXPERIENCES: ExperienceSeed[] = [
@@ -72,7 +73,7 @@ const EXPERIENCES: ExperienceSeed[] = [
     id: 'exp-costa-convivio', marketId: MARKET, title: 'Costa Convivio', category: 'Retreats',
     summary: 'The Cape Winelands retreat. An exquisite escape, a shared table, a deeper connection.',
     description: 'Costa Convivio is Quintara\u2019s signature retreat experience, bringing together wellness, gastronomy, culture and meaningful connection in exceptional surroundings. Set against the beauty of the Cape Winelands, it offers an intimate escape for those who appreciate thoughtful hospitality, engaging company and the pleasure of a day beautifully spent. From leisurely mornings and vineyard discoveries to elegant dining and conversations that linger, it creates space to reconnect with yourself, with nature and with an inspiring circle of people.',
-    startsAt: '2026-10-11T08:00:00Z', timezone: ZONE, venueName: 'A private wine estate', area: 'Cape Winelands', dressCode: 'Linen and colour', host: 'Aisha Parker',
+    startsAt: sampleDate('2026-10-11T08:00:00Z'), timezone: ZONE, venueName: 'A private wine estate', area: 'Cape Winelands', dressCode: 'Linen and colour', host: 'Aisha Parker',
     programme: [{ time: '10:00', title: 'Arrival and a leisurely morning' }, { time: '11:30', title: 'Vineyard discovery' }, { time: '13:30', title: 'Lunch at the shared table' }],
     included: ['Wellness session', 'Vineyard discovery', 'Lunch with estate wines'],
     capacity: 40, baseSeatsTaken: 21, priceMinor: 145000, memberPriceMinor: 115000, currency: 'ZAR',
@@ -82,7 +83,7 @@ const EXPERIENCES: ExperienceSeed[] = [
     id: 'exp-episimo-dipno', marketId: MARKET, title: 'Ep\u00edsimo D\u00edpno', category: 'Fine dining',
     summary: 'The art of dining. Considered hospitality, remarkable cuisine and conversations that deserve an evening of their own.',
     description: 'Ep\u00edsimo D\u00edpno is Quintara\u2019s signature fine dining experience, bringing together a carefully curated circle of members and invited guests around one beautifully appointed table. Set within distinguished restaurants, intimate private residences and exceptional hospitality destinations, each edition celebrates the pleasure of dining well and the people who make it memorable. From the welcome drink to the final conversation, every detail serves a shared purpose: an evening of warmth, discovery and meaningful connection.',
-    startsAt: '2026-10-17T17:00:00Z', timezone: ZONE, venueName: 'A private residence', area: 'Constantia', dressCode: 'Black tie', host: 'Quintara',
+    startsAt: sampleDate('2026-10-17T17:00:00Z'), timezone: ZONE, venueName: 'A private residence', area: 'Constantia', dressCode: 'Black tie', host: 'Quintara',
     programme: [{ time: '19:00', title: 'Welcome drink' }, { time: '20:00', title: 'Dinner at one table' }, { time: '23:00', title: 'The final conversation' }],
     included: ['Welcome drink', 'Dinner with paired wines'],
     capacity: 24, baseSeatsTaken: 24, priceMinor: 240000, memberPriceMinor: 240000, currency: 'ZAR',
@@ -92,7 +93,7 @@ const EXPERIENCES: ExperienceSeed[] = [
     id: 'exp-founder-rally', marketId: MARKET, title: 'The Penthouse Sessions', category: 'Conversations',
     summary: 'Hosted in Cape Town\u2019s most exclusive penthouses, for a small audience of 20 to 30 guests.',
     description: 'Intimate sessions on entrepreneurship, wealth, artificial intelligence, leadership, luxury and venture capital, hosted in Cape Town\u2019s most exclusive penthouses. The audience is kept to 20 to 30 guests, so seats are allocated by the Quintara team.',
-    startsAt: '2026-10-22T16:00:00Z', timezone: ZONE, venueName: 'A private penthouse', area: 'Cape Town', dressCode: 'Smart', host: 'Sipho Ndlovu',
+    startsAt: sampleDate('2026-10-22T16:00:00Z'), timezone: ZONE, venueName: 'A private penthouse', area: 'Cape Town', dressCode: 'Smart', host: 'Sipho Ndlovu',
     programme: [{ time: '18:00', title: 'Arrival' }, { time: '18:30', title: 'The session' }, { time: '20:00', title: 'Drinks and conversation' }],
     included: ['The session', 'Drinks'],
     capacity: 30, baseSeatsTaken: 12, priceMinor: 0, memberPriceMinor: 0, currency: 'ZAR',
@@ -102,7 +103,7 @@ const EXPERIENCES: ExperienceSeed[] = [
     id: 'exp-invitational', marketId: MARKET, title: 'Quintara Golf Invitational', category: 'Golf',
     summary: 'A private golf networking day, by invitation.',
     description: 'A private golf networking day with luxury hospitality, pairings that bring investors, founders and creatives together, and executive networking from the first tee to the clubhouse.',
-    startsAt: '2026-10-29T05:30:00Z', timezone: ZONE, venueName: 'Steenberg Golf Club', area: 'Tokai', dressCode: 'Club golf attire', host: 'Daniel Fourie',
+    startsAt: sampleDate('2026-10-29T05:30:00Z'), timezone: ZONE, venueName: 'Steenberg Golf Club', area: 'Tokai', dressCode: 'Club golf attire', host: 'Daniel Fourie',
     programme: [{ time: '07:30', title: 'Breakfast and registration' }, { time: '08:30', title: 'Shotgun start' }, { time: '13:30', title: 'Lunch and networking' }],
     included: ['Luxury hospitality', 'Curated pairings', 'Executive networking'],
     capacity: 48, baseSeatsTaken: 30, priceMinor: 320000, memberPriceMinor: 320000, currency: 'ZAR',
@@ -112,7 +113,7 @@ const EXPERIENCES: ExperienceSeed[] = [
     id: 'exp-code-capital', marketId: MARKET, title: 'The Executive Yacht Club', category: 'Networking',
     summary: 'Networking aboard a luxury yacht along the Atlantic Seaboard.',
     description: 'A sunset cruise along the Atlantic Seaboard with a champagne reception, live music and gourmet dining. Investor introductions are arranged by the Quintara team on request.',
-    startsAt: '2026-11-05T16:00:00Z', timezone: ZONE, venueName: 'Aboard a private yacht', area: 'Atlantic Seaboard', dressCode: 'Yacht smart', host: 'Quintara',
+    startsAt: sampleDate('2026-11-05T16:00:00Z'), timezone: ZONE, venueName: 'Aboard a private yacht', area: 'Atlantic Seaboard', dressCode: 'Yacht smart', host: 'Quintara',
     programme: [{ time: '18:00', title: 'Boarding and champagne reception' }, { time: '18:45', title: 'Sunset cruise and live music' }, { time: '20:00', title: 'Dinner and introductions' }],
     included: ['Champagne reception', 'Gourmet dining', 'Live music'],
     capacity: 60, baseSeatsTaken: 18, priceMinor: 0, memberPriceMinor: 0, currency: 'ZAR',
@@ -122,7 +123,7 @@ const EXPERIENCES: ExperienceSeed[] = [
     id: 'exp-aura-enclave', marketId: MARKET, title: 'The Aura Enclave', category: 'Signature evenings',
     summary: 'A Gatsby experience. An era reimagined, not recreated.',
     description: 'An exquisite evening. An intriguing encounter. The beginning of summer. As the last light of a Cape Town afternoon dissolves into gold across the Atlantic, Quintara opens its most anticipated chapter of the year. The Aura Enclave is not simply an event; it is an invitation into a world where elegance is not performed, but lived; where the romance of a bygone era meets the unmistakable pulse of the city\u2019s most sought-after private circle. This is summer, as it was always meant to be entered: beautifully, deliberately, and among company worth remembering.',
-    startsAt: '2026-11-13T16:00:00Z', timezone: ZONE, venueName: 'A private address', area: 'Atlantic Seaboard', dressCode: 'Gatsby, reimagined', host: 'Quintara',
+    startsAt: sampleDate('2026-11-13T16:00:00Z'), timezone: ZONE, venueName: 'A private address', area: 'Atlantic Seaboard', dressCode: 'Gatsby, reimagined', host: 'Quintara',
     programme: [{ time: '18:00', title: 'Arrival at golden hour' }, { time: '19:30', title: 'The evening opens' }, { time: '22:00', title: 'Late music' }],
     included: ['Welcome reception', 'Dinner', 'Music'],
     capacity: 120, baseSeatsTaken: 115, priceMinor: 450000, memberPriceMinor: 380000, currency: 'ZAR',
@@ -132,7 +133,7 @@ const EXPERIENCES: ExperienceSeed[] = [
     id: 'exp-investor-circle', marketId: MARKET, title: 'The Investor Circle', category: 'Investment',
     summary: 'Cape Town\u2019s premier invitation-only investment breakfast.',
     description: 'An exclusive breakfast for family offices, venture capitalists, angel investors and founders. Topics include investment trends, capital raising, deal sourcing, wealth creation and cross-border investment.',
-    startsAt: '2026-11-19T05:30:00Z', timezone: ZONE, venueName: 'A private dining room', area: 'Cape Town', dressCode: 'Business', host: 'Daniel Fourie',
+    startsAt: sampleDate('2026-11-19T05:30:00Z'), timezone: ZONE, venueName: 'A private dining room', area: 'Cape Town', dressCode: 'Business', host: 'Daniel Fourie',
     programme: [{ time: '07:30', title: 'Arrival and coffee' }, { time: '08:00', title: 'Breakfast and discussion' }, { time: '09:30', title: 'Introductions' }],
     included: ['Breakfast'],
     capacity: 24, baseSeatsTaken: 10, priceMinor: 0, memberPriceMinor: 0, currency: 'ZAR',
@@ -142,7 +143,7 @@ const EXPERIENCES: ExperienceSeed[] = [
     id: 'exp-tennis-social', marketId: MARKET, title: 'Quintara Tennis Social', category: 'Sport and wellness',
     summary: 'Play. Connect. Inspire.',
     description: 'A members-only, invitation-only networking experience that brings together a curated community of 15 to 20 entrepreneurs, startup founders, investors, executives and premium digital creators for an afternoon of sport, wellness, meaningful conversation and luxury hospitality. It is not a competitive tournament, but a sophisticated lifestyle gathering where business relationships are cultivated through shared experiences in a relaxed and elegant environment.',
-    startsAt: '2026-11-21T12:00:00Z', timezone: ZONE, venueName: 'A private tennis club', area: 'Cape Town', dressCode: 'Tennis whites', host: 'Quintara',
+    startsAt: sampleDate('2026-11-21T12:00:00Z'), timezone: ZONE, venueName: 'A private tennis club', area: 'Cape Town', dressCode: 'Tennis whites', host: 'Quintara',
     programme: [{ time: '14:00', title: 'Arrival and welcome' }, { time: '14:30', title: 'Social tennis' }, { time: '17:00', title: 'Hospitality and conversation' }],
     included: ['Social tennis', 'Wellness', 'Luxury hospitality'],
     capacity: 20, baseSeatsTaken: 8, priceMinor: 150000, memberPriceMinor: 120000, currency: 'ZAR',
@@ -152,7 +153,7 @@ const EXPERIENCES: ExperienceSeed[] = [
     id: 'exp-house-feast', marketId: MARKET, title: 'House Feast', category: 'Parties',
     summary: 'The Quintara signature villa party.',
     description: 'Afro house sunsets with scenic views of the Atlantic Seaboard. A DJ, acoustic sets and good vibes.',
-    startsAt: '2026-11-28T14:00:00Z', timezone: ZONE, venueName: 'A private villa', area: 'Atlantic Seaboard', dressCode: 'Summer chic', host: 'Quintara',
+    startsAt: sampleDate('2026-11-28T14:00:00Z'), timezone: ZONE, venueName: 'A private villa', area: 'Atlantic Seaboard', dressCode: 'Summer chic', host: 'Quintara',
     programme: [{ time: '16:00', title: 'Doors' }, { time: '17:30', title: 'Sunset set' }, { time: '20:00', title: 'Acoustic session' }],
     included: ['DJ and acoustic sets', 'Welcome drink'],
     capacity: 150, baseSeatsTaken: 60, priceMinor: 95000, memberPriceMinor: 75000, currency: 'ZAR',
@@ -162,7 +163,7 @@ const EXPERIENCES: ExperienceSeed[] = [
     id: 'exp-tera-convivio', marketId: MARKET, title: 'Tera Convivio', category: 'Journeys',
     summary: 'Three days of wilderness, refined hospitality and exceptional company.',
     description: 'Tera Convivio brings Quintara\u2019s spirit of connection into the African wilderness. Over three days and two nights, an intimate gathering of members and invited guests discovers extraordinary landscapes, shares beautifully prepared meals and enjoys the comfort of a luxury villa reserved exclusively for the group. The journey begins in Cape Town, continues through Johannesburg and unfolds with a private helicopter transfer to the Greater Kruger. At its heart is an unhurried rhythm: early mornings in the bush, leisurely afternoons at the villa and evenings gathered around a beautifully dressed table.',
-    startsAt: '2026-12-04T06:00:00Z', timezone: ZONE, venueName: 'A private safari villa', area: 'Greater Kruger', dressCode: 'Safari neutrals', host: 'Quintara',
+    startsAt: sampleDate('2026-12-04T06:00:00Z'), timezone: ZONE, venueName: 'A private safari villa', area: 'Greater Kruger', dressCode: 'Safari neutrals', host: 'Quintara',
     programme: [{ time: 'Day 1', title: 'Cape Town to Johannesburg, then by private helicopter to the villa' }, { time: 'Day 2', title: 'Early morning in the bush, an afternoon at the villa, dinner at a dressed table' }, { time: 'Day 3', title: 'A last morning in the bush and the journey home' }],
     included: ['Two nights in a private villa', 'All meals', 'Private helicopter transfer'],
     capacity: 12, baseSeatsTaken: 4, priceMinor: 9500000, memberPriceMinor: 8500000, currency: 'ZAR',
@@ -648,6 +649,7 @@ export function createMockApi(options: MockApiOptions = {}): QuintaraApi {
       call(() => {
         const session = requireMember('experiences.book');
         const seed = findExperience(experienceId);
+        if (seed.startsAt && Date.parse(seed.startsAt) <= Date.now()) throw new ApiError('conflict', 'This experience has already taken place.');
         if (!Number.isInteger(seats) || seats < 1 || seats > seed.maxSeatsPerBooking) {
           throw new ApiError('validation', `Choose between 1 and ${seed.maxSeatsPerBooking} seats.`, { seats: 'Choose a valid number of seats' });
         }

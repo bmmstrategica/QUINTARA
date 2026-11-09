@@ -1482,3 +1482,17 @@ export function sectionText(list: readonly SectionCopy[] | undefined, key: Secti
 
 export * from './qera.ts';
 export * from './whatsapp.ts';
+
+/* ---------- Sample data ---------- */
+
+const SAMPLE_BASE = Date.parse('2026-10-11T00:00:00Z');
+const WEEK = 7 * 86_400_000;
+/**
+ * The sample experiences (development seed and the offline mock) are written with dates from 11 October 2026. They are
+ * moved forward by whole weeks so the earliest is always at least a week ahead, keeping weekdays and local times.
+ * Before that date nothing moves. Production data never passes through this.
+ */
+export function sampleDate(iso: string, now: number = Date.now()): string {
+  const weeks = Math.max(0, Math.ceil((now + WEEK - SAMPLE_BASE) / WEEK));
+  return new Date(Date.parse(iso) + weeks * WEEK).toISOString().replace('.000Z', 'Z');
+}

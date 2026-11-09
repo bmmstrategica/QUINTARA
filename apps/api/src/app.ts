@@ -33,6 +33,7 @@ import * as notifications from './notifications.ts';
 import * as push from './push.ts';
 import * as renewals from './renewals.ts';
 import * as insights from './insights.ts';
+import { getDashboard } from './dashboard.ts';
 import * as partners from './partners.ts';
 import { deliverEmails } from './email.ts';
 import * as partnerBookings from './partner-bookings.ts';
@@ -725,6 +726,8 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   app.post<Id>('/admin/v1/account-closures/:id/reinstate', (request, reply) => done(admin.reinstateClosedAccount(db, request.ctx, request.params.id), reply));
   app.get('/admin/v1/reports', (request) => admin.listReports(db, request.ctx));
   app.post<Id>('/admin/v1/reports/:id/resolve', (request, reply) => done(admin.resolveReport(db, request.ctx, request.params.id, request.body), reply));
+  // The Overview: figures and waiting work for the city, each section only for roles that may see it.
+  app.get('/admin/v1/dashboard', (request) => getDashboard(db, request.ctx));
   app.get('/admin/v1/insights', (request) => insights.getInsights(db, request.ctx, request.query));
   app.get('/admin/v1/insights/export', async (request, reply) => {
     const csv = await insights.insightsCsv(db, request.ctx, request.query);

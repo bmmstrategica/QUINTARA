@@ -104,8 +104,10 @@ export async function bookExperience(db: Db, ctx: RequestContext, experienceId: 
   const session = requireMember(ctx, 'experiences.book');
   return db.tx(async (tx) => {
     // Lock the experience row so two bookings cannot both take the last seat.
-    const locked = UUID.test(experienceId) ? await tx.query<{ payment_hold_minutes: number }>(`SELECT payment_hold_minutes FROM experiences WHERE id = $1 AND status = 'published' FOR UPDATE`, [experienceId]) : [];
+    const locked = UUID.test(experienceId) ? await tx.query<{ payment_hold_minutes: number; started: boolean }>(`SELECT payment_hold_minutes, starts_at <= now() AS started FROM experiences WHERE id = $1 AND status = 'published' FOR UPDATE`, [experienceId]) : [];
     if (!locked[0]) throw notFound('This experience is not available.');
+    // An experience that has begun (or passed) can no longer be booked.
+    if (locked[0].started) throw conflict('This experience has already taken place.');
     // Holds that were never paid give their seats back.
     await tx.query(`UPDATE experience_bookings SET status = 'cancelled', updated_at = now() WHERE experience_id = $1 AND status = 'awaiting_payment' AND payment_due_at <= now()`, [experienceId]);
     const experience = await getExperience(tx, ctx, experienceId);

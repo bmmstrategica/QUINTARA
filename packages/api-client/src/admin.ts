@@ -54,6 +54,23 @@ export interface StaffReport { id: string; reason: ReportReason; detail: string;
 export type InsightPeriod = '7d' | '30d' | '90d' | '12m' | 'ytd';
 export interface InsightQuery { period?: InsightPeriod; from?: string; to?: string }
 export interface InsightRange { from: string; to: string; label: string }
+/** The Overview: GET /admin/v1/dashboard. A section is null when the viewer's role does not include it. */
+export interface StaffDashboard {
+  market: { name: string; currency: string };
+  business: null | {
+    revenueMinor: number; revenuePrevMinor: number; activeMembers: number; newMembers: number; newMembersPrev: number;
+    bookings: number; bookingsPrev: number; orders: number; ordersPrev: number; revenueBySource: { label: string; totalMinor: number }[];
+  };
+  membership: null | { activeMembers: number; suspendedMembers: number; applicationsToReview: number; awaitingPayment: number; renewalsDue30: number };
+  experiences: null | {
+    upcoming: number; full: number; seatsBooked: number; seatsTotal: number; awaitingDecision: number;
+    next: { id: string; title: string; startsAt: string; seatsTaken: number; capacity: number }[];
+  };
+  concierge: null | { openRequests: number; newRequests: number; openServiceRequests: number; partnerBookingsWaiting: number };
+  maison: null | { toProcess: number; preparing: number; withCourier: number };
+  generatedAt: string;
+}
+
 export interface StaffInsights {
   market: { name: string; currency: string };
   period: InsightRange;
@@ -232,6 +249,7 @@ export interface AdminApi {
   listReports(): Promise<StaffReport[]>;
   /** Closes a report. `suspended` also suspends the reported member. */
   resolveReport(id: string, outcome: 'dismissed' | 'suspended'): Promise<void>;
+  getDashboard(): Promise<StaffDashboard>;
   getInsights(query?: InsightQuery): Promise<StaffInsights>;
   /** The figures as a CSV file, for the same period. */
   insightsExportUrl(query?: InsightQuery): string;
@@ -354,6 +372,7 @@ export function createAdminApi(options: HttpApiOptions): AdminApi {
     reinstateClosedAccount: (userId) => request('POST', `/admin/v1/account-closures/${id(userId)}/reinstate`),
     listReports: () => request('GET', '/admin/v1/reports'),
     resolveReport: (reportId, outcome) => request('POST', `/admin/v1/reports/${id(reportId)}/resolve`, { outcome }),
+    getDashboard: () => request('GET', '/admin/v1/dashboard'),
     getInsights: (q = {}) => request('GET', `/admin/v1/insights${queryString(insightQuery(q))}`),
     insightsExportUrl: (q = {}) => `${options.baseUrl.replace(/\/$/, '')}/admin/v1/insights/export${queryString(insightQuery(q))}`,
     getReportSetting: () => request('GET', '/admin/v1/insights/report'),
