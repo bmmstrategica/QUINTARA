@@ -134,7 +134,7 @@ test('the web app and the admin console fit a phone screen', async ({ browser })
     expect(await fits(), `web ${path}`).toBe(true);
   }
   await adminSignIn(page, 'admin@example.com');
-  for (const path of ['/', '/applications', '/members', '/experiences', '/orders', '/staff']) {
+  for (const path of ['/', '/applications', '/members', '/experiences', '/orders', '/staff', '/insights']) {
     await page.goto(`${ADMIN}${path}`);
     await page.waitForLoadState('networkidle');
     expect(await fits(), `admin ${path}`).toBe(true);

@@ -92,14 +92,14 @@ passed on the final code.
 
 ## 4. Quality assurance
 
-**Executed on the final code (9 November 2026):**
+**Executed on the final code of stage 2 (9 November 2026):**
 
 | Suite | Result |
 |---|---|
 | Type-check, 9 packages | passed |
-| API tests (unit, integration, security, contract) | **167 passed, 0 failed** (153 before this work) |
+| API tests (unit, integration, security, contract) | **174 passed, 0 failed** (153 before this work) |
 | Offline-mock client tests | 8 passed |
-| End-to-end browser journeys (Playwright, Chromium) | 5 passed |
+| End-to-end browser journeys (Playwright, Chromium) | 8 passed |
 | Production builds: web, admin, Maison | succeeded |
 | Migrations and first-run on PostgreSQL 16 | succeeded, idempotent |
 | API on its image's production-only dependencies | booted, `/ready` ok |
@@ -118,7 +118,28 @@ the database, past experiences being bookable, and sample data that had fallen i
   could not complete in this sandbox (its TLS proxy and BuildKit sessions); the CI job builds it.
 - *QÉRA against the live Anthropic API*: not called (no key here). The request shape follows the current SDK types.
 - *Mobile app*: not run on a device in this work (as before; RELEASE.md).
-- *Known minor issue*: on a 390px phone the Insights chart's axis labels overhang the page by 14px.
+- *Camera scanning at check-in*: built on the browser's BarcodeDetector, which headless Chromium on Linux lacks, so
+  decoding a ticket by camera was not automated. The QR image and check-in by its code are tested end to end.
+
+## 4b. Stage 2: hosted checkout, QR tickets, phone layout
+
+With the payment provider to be chosen later, stage 2 built everything a provider needs except its adapter.
+
+- **Hosted checkout** (`apps/api/src/checkout.ts`). Bookings, Maison orders and membership fees are prepared and
+  settled by shared functions; the app sends the member to the provider's page; a signed webhook and the member's
+  return both settle the payment, exactly once. Money that arrives for something already paid or cancelled is refunded.
+  Development and staging use a test checkout on the API (Pay or Decline, HMAC-signed webhooks). Production still
+  refuses payments until an adapter is configured.
+- **Apps.** Web (`/payments/return`), the Maison shop (its Thank you sheet) and mobile (the phone's browser) all pay
+  through `payThrough` in `app-core`, which falls back to direct charges where the API simulates payments.
+- **QR tickets** on the web Bookings page; **camera scanning** at admin Check-in where the browser supports it.
+- **Fixes:** Insights tiles overflowed phones (the cause was a wide figure, not the chart as stage 1 said); the dev
+  server's sign-in limit can be raised for test runs (never in production); `tsc` now rejects syntax Node cannot strip.
+
+**Adding a real provider** means one class implementing `HostedCheckout` (`startCheckout`, `checkoutState`,
+`readWebhook` with the provider's signature scheme) and `refund`, passed in `server.ts`, plus its webhook pointed at
+`https://<api>/v1/payments/webhook`. Saved cards for automatic renewals (`saveCard`, charging by token) are a second,
+provider-specific step.
 
 ## 5. Security assessment
 
@@ -128,9 +149,10 @@ hash-chained audit log, rate limits, encrypted secrets at rest, upload checking 
 consent records and erasure. A route-guard test calls all routes as a visitor and as a member.
 
 Added: findings 14–18 in docs/SECURITY.md (payments fail-safe, role key collision, past bookings, probe isolation,
-Insights permission). The Anthropic key stays on the server, and QÉRA can only propose actions, never take them.
+Insights permission), and in stage 2 the checkout's protections (signed webhooks checked on the raw body, return
+addresses limited to Quintara's apps, exactly-once settlement, refunds of late money). The Anthropic key stays on the server, and QÉRA can only propose actions, never take them.
 
-**Outstanding risks before launch:** a real payment provider with hosted checkout (no card data at Quintara); an
+**Outstanding risks before launch:** a real payment provider's adapter for the hosted checkout (no card data at Quintara); an
 independent penetration test; a non-superuser database role; daily write-once audit export; Redis-backed rate limits
 with more than one API process; `pnpm audit` advisories in Expo build tooling (not on servers).
 
@@ -153,21 +175,22 @@ Statuses: **Tested** = implemented and tested. **Credentials** = implemented, aw
 | | Profiles, privacy settings, data export, account closure | Tested | existing |
 | | Tiers, fees, privileges configurable in the console | Tested | existing |
 | | Renewal and expiry tracking, reminders | Tested | charging waits for a payment provider |
-| | Membership payment | Blocked | provider choice and merchant credentials |
+| | Membership payment | Partial | hosted checkout flow built and tested with the test checkout; the provider's adapter waits on its choice and merchant credentials |
 | | Digital membership card | Partial | card with member number on Profile (existing); not separately tested in this work |
 | Experiences | Listings, details, categories, capacity, limits | Tested | existing |
 | | Booking, waitlist, applied, complimentary and paid holds | Tested | existing |
+| | Paying for seats through the hosted checkout | Partial | flow tested end to end with the test checkout (e2e); real provider adapter pending |
 | | Cancellation and refund rules | Tested | refunds run through the provider; blocked like payments in production |
 | | Past experiences cannot be booked | Tested | new |
 | | Ticket codes and check-in | Tested | existing |
-| | QR codes on tickets | Partial | text ticket codes only; no QR image or scanner |
+| | QR codes on tickets; camera scanning at check-in | Tested | QR and check-in by its code tested end to end; camera decoding not automatable here (section 4) |
 | | Notifications and email | Tested | email needs `RESEND_API_KEY` (Credentials) |
 | | Create, edit, publish, guest lists, attendance in the console | Tested | e2e and existing |
 | Concierge and lifestyle | Requests, desk replies, stages, member confirmation | Tested | existing; e2e |
 | | Lifestyle services, packages, requests; partners and privileges | Tested | existing |
 | | Partner bookings confirmed by the partner, never assumed | Tested | existing |
 | Maison Quintara | Products, stock, member pricing, cart, guest orders, tracking | Tested | existing |
-| | Checkout payment | Blocked | as membership payment |
+| | Checkout payment | Partial | as membership payment |
 | Networking | Directory, connections, messages, blocking, reports | Tested | existing; the web screens refresh by link, not live (README) |
 | QÉRA | Rule-based model, tools, proposals, memory, briefs | Tested | existing |
 | | Claude as hosted model | Credentials | `ANTHROPIC_API_KEY`; tested offline only |
@@ -183,7 +206,7 @@ Statuses: **Tested** = implemented and tested. **Credentials** = implemented, aw
 
 ## 7. GitHub and approvals
 
-- Branch `claude/gifted-wright-qapo61`, 9 commits on the initial commit `3aeb174`. No pull request opened yet; nothing
+- Branch `claude/gifted-wright-qapo61`, on the initial commit `3aeb174` (stage 1: 9 commits; stage 2 below). No pull request opened yet; nothing
   merged. CI runs on push once the workflow is on GitHub.
 - **Decisions and approvals needed from Quintara:** the payment provider (for example Peach Payments, Paystack or
   Stripe) and merchant credentials; hosting accounts and DNS; Resend; whether QÉRA should use Claude (and an

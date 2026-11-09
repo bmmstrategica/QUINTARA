@@ -195,6 +195,13 @@ This covers members, guest accounts, applicants and staff. There are no password
 | 17 | Liveness (`/health`) read the database through the session lookup, so a database blip could restart healthy API processes. | Low | Probes skip the session lookup; `/ready` checks the database separately. |
 | 18 | Insights (revenue) was readable by anyone who could manage members. | Low | Its own permission, `admin.insights.view`. |
 
+**Paying through a hosted checkout (stage 2).** Card details are typed only on the provider's page. The provider's
+webhook (`POST /v1/payments/webhook`) is read as raw bytes and refused unless its signature checks; it is exempt from
+the cookie CSRF check because it carries no session. A checkout's return address must be one of `WEB_ORIGINS`.
+Settling is exactly once under a row lock; money for something already paid or cancelled is refunded and audited.
+The test checkout page exists only with the test provider (never in production) and runs no script.
+**The admin console may use the camera** (`camera=(self)`), for scanning tickets at check-in; the web app may not.
+
 **Dependencies.** The remaining `pnpm audit` advisories are in Expo's and Metro's build tools (`node-forge`,
 `braces`, `uuid` in `@expo/cli` and Metro) and in `decode-uri-component`, which expo-router uses on the device.
 None runs on the API or the web servers. Each will be resolved when Expo updates them; run `pnpm audit` before

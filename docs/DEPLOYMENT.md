@@ -25,8 +25,8 @@ Use three, each with its own database and secrets:
 
 | | `NODE_ENV` | `DEPLOY_ENV` | Sign-in | Payments |
 |---|---|---|---|---|
-| Development (a laptop) | `development` | | address alone, or codes | simulated |
-| Staging | `production` | `staging` | codes by email, two-factor | simulated (no money) |
+| Development (a laptop) | `development` | | address alone, or codes | test checkout, or simulated |
+| Staging | `production` | `staging` | codes by email, two-factor | test checkout (no money) |
 | Production | `production` | `production` | codes by email, two-factor | refused until a real provider is configured |
 
 Staging runs exactly as production does, except that it may simulate payments. Never point staging at the
@@ -48,7 +48,9 @@ in the repository. `.env.example` lists them all with notes.
 | `WEB_ORIGINS` | yes | The web app, admin console and shop addresses, comma-separated. Only these may call with cookies. |
 | `WEB_URL`, `ADMIN_URL` | yes | Where email links point. |
 | `TRUST_PROXY=true` | behind a load balancer | So rate limits see real addresses. |
-| `DEPLOY_ENV` | | `staging` lets a staging deployment simulate payments. |
+| `DEPLOY_ENV` | | `staging` lets a staging deployment use the test checkout. |
+| `API_URL` | staging | The API's own public address, for the test checkout's links. |
+| `PAYMENTS` | optional | Development and staging: `simulated` charges at once instead of the test checkout. |
 | `ANTHROPIC_API_KEY` | optional | QÉRA answers with Claude. Without it, the built-in rule-based model. |
 | `QERA_MODEL`, `QERA_EFFORT` | optional | Claude model (default `claude-opus-5-5`; `rules` keeps the rule-based model) and thinking effort. |
 | `WHATSAPP_*` (six) | optional | QÉRA on WhatsApp; all six or none. |
@@ -71,6 +73,13 @@ These are public by design: they are addresses, not secrets.
 5. Deploy the three web apps with their `NEXT_PUBLIC_*` settings; point DNS; confirm HTTPS.
 6. Sign in to the admin console as the first administrator, set up two-factor, add the other staff with their roles,
    and add the real content (experiences, partners, services, Maison Quintara, TV, photographs, descriptions).
+
+## Payments
+
+Members pay on the provider's hosted checkout and come back to `https://app…/payments/return` (the shop: its home
+page). Once a provider is chosen and its adapter written: register `https://<api>/v1/payments/webhook` with the provider
+for payment events, set its keys in the host's secret store, and test end to end in staging with the provider's test
+cards before production.
 
 ## Each release
 

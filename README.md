@@ -844,3 +844,14 @@ Passcode fallback, and "Sign out" on the lock screen.
 - Booking an experience that has started is refused. Sample experience dates follow today (`sampleDate`).
 - `GET /ready` (database check), `apps/api/Dockerfile`, CI in `.github/workflows/ci.yml`, browser journeys in `e2e/`.
 - Admin console on phones: tables scroll in place instead of widening every page.
+
+## Hosted checkout and QR tickets (migration 0034)
+
+- **Paying.** Bookings, Maison orders and membership fees are paid on the payment provider's hosted checkout:
+  `POST /v1/payments/checkout` starts one (the return address must be a Quintara app), the provider's signed webhook
+  (`POST /v1/payments/webhook`) and the member's return (`GET /v1/payments/checkout/:id`, web `/payments/return`) settle
+  it exactly once. Development and staging use a test checkout on the API (Pay or Decline; `PAYMENTS=simulated` charges
+  at once instead). Production refuses payments until a real provider's `HostedCheckout` adapter is configured.
+  The apps choose through `payThrough` in `app-core`.
+- **Tickets.** Confirmed bookings on the web show their ticket as a QR code; the admin Check-in page scans it with the
+  camera where the browser can (Chrome, Edge), and takes the typed code everywhere.

@@ -152,8 +152,8 @@ input[type="file"] { padding: 8px; }
 /* Series colours, validated for colour-blind separation on both surfaces (dataviz reference palette, slots 1 to 5). */
 .viz { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181; }
 :root[data-theme="light"] .viz { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #e87ba4; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-.tile { background: var(--q-surface); border: 1px solid var(--q-line); border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr)); gap: 12px; }
+.tile { min-width: 0; background: var(--q-surface); border: 1px solid var(--q-line); border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
 .tile .k { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--q-muted); }
 .tile .v { font: 400 30px/1.1 var(--serif); color: var(--q-ink); font-variant-numeric: tabular-nums; }
 .tile .d { font-size: 12.5px; color: var(--q-muted); }
