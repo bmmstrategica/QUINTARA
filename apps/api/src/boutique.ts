@@ -232,12 +232,12 @@ const COLUMNS: Record<string, string> = { title: 'title', maker: 'maker', catego
 const priceProblem = () => new HttpError(422, 'The member price cannot be higher than the public price.', { memberPriceMinor: 'Too high' });
 
 export async function listProductsForStaff(db: Queryable, ctx: RequestContext) {
-  requireStaff(ctx, 'admin.content.manage');
+  requireStaff(ctx, 'admin.boutique.manage');
   return (await db.query(`${SELECT_PRODUCT} WHERE p.market_id = $2 ORDER BY (p.status = 'archived'), p.title`, [null, ctx.marketId])).map((row) => toProduct(row, false));
 }
 
 export async function createProduct(db: Db, ctx: RequestContext, marketId: string, body: unknown): Promise<{ id: string }> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.boutique.manage');
   const parsed = productInputSchema.safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   const d = parsed.data;
@@ -252,7 +252,7 @@ export async function createProduct(db: Db, ctx: RequestContext, marketId: strin
 }
 
 export async function updateProduct(db: Db, ctx: RequestContext, id: string, body: unknown): Promise<void> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.boutique.manage');
   const parsed = productInputSchema.omit({ currency: true }).partial().safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   const data = parsed.data as Record<string, unknown>, sent = Object.keys(COLUMNS).filter((key) => key in ((body ?? {}) as object) && data[key] !== undefined);
@@ -278,7 +278,7 @@ export type StaffOrder = Order & {
 };
 
 export async function listOrdersForStaff(db: Queryable, ctx: RequestContext): Promise<StaffOrder[]> {
-  requireStaff(ctx, 'admin.content.manage');
+  requireStaff(ctx, 'admin.boutique.manage');
   // Every order from the moment it is placed. Unpaid and cancelled orders are shown for 30 days, for reference.
   const rows = await db.query(`${SELECT_ORDER} WHERE o.market_id = $1 AND (o.status NOT IN ('awaiting_payment', 'cancelled') OR o.created_at > now() - interval '30 days')
     ORDER BY CASE o.status WHEN 'paid' THEN 0 WHEN 'preparing' THEN 1 WHEN 'dispatched' THEN 2 WHEN 'awaiting_payment' THEN 3 ELSE 4 END, o.created_at DESC LIMIT 500`, [ctx.marketId]);
@@ -303,7 +303,7 @@ const TOLD: Record<string, string> = { preparing: 'is being processed', dispatch
  * number; marking it received needs the name of whoever took it in. A note, if given, is shown to the buyer.
  */
 export async function advanceOrder(db: Db, ctx: RequestContext, id: string, body: unknown = null): Promise<void> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.boutique.manage');
   const parsed = advanceOrderSchema.safeParse(body ?? {});
   if (!parsed.success) throw validation(parsed.error.issues);
   const input = parsed.data, note = input.note ?? '';
@@ -334,7 +334,7 @@ export async function advanceOrder(db: Db, ctx: RequestContext, id: string, body
 
 /** A note on an order for staff only: a call with the courier, a question from the buyer. */
 export async function addOrderNote(db: Db, ctx: RequestContext, id: string, body: unknown): Promise<void> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.boutique.manage');
   const parsed = orderNoteSchema.safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   if (!UUID.test(id) || !(await db.query('SELECT 1 FROM orders WHERE id = $1', [id]))[0]) throw notFound('This order does not exist.');
@@ -344,7 +344,7 @@ export async function addOrderNote(db: Db, ctx: RequestContext, id: string, body
 
 /** Staff can cancel an order until it is dispatched, with a reason the buyer is told. A paid order is refunded in full. */
 export async function cancelOrderForStaff(db: Db, ctx: RequestContext, provider: PaymentProvider, id: string, body: unknown): Promise<void> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.boutique.manage');
   const parsed = z.object({ reason: z.string().trim().min(5, 'Give the buyer a reason').max(500) }).safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   const found = await db.tx(async (tx) => {
@@ -365,12 +365,12 @@ export async function cancelOrderForStaff(db: Db, ctx: RequestContext, provider:
 /* ---------- Staff: delivery methods ---------- */
 
 export async function listDeliveryOptionsForStaff(db: Queryable, ctx: RequestContext) {
-  requireStaff(ctx, 'admin.content.manage');
+  requireStaff(ctx, 'admin.boutique.manage');
   return (await db.query('SELECT * FROM delivery_options WHERE market_id = $1 ORDER BY is_active DESC, fee_minor, name', [ctx.marketId])).map(toDeliveryOption);
 }
 
 export async function createDeliveryOption(db: Db, ctx: RequestContext, marketId: string, body: unknown): Promise<{ id: string }> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.boutique.manage');
   const parsed = deliveryOptionInputSchema.safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   const d = parsed.data;
@@ -383,7 +383,7 @@ export async function createDeliveryOption(db: Db, ctx: RequestContext, marketId
 }
 
 export async function updateDeliveryOption(db: Db, ctx: RequestContext, id: string, body: unknown): Promise<void> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.boutique.manage');
   const parsed = deliveryOptionInputSchema.omit({ currency: true }).partial().safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   const columns: Record<string, string> = { name: 'name', description: 'description', feeMinor: 'fee_minor', freeOverMinor: 'free_over_minor', isActive: 'is_active' };

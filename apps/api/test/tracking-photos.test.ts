@@ -20,7 +20,7 @@ test('order tracking: every step is recorded with when and who, staff notes stay
     const order = await place();
     assert.deepEqual(order.timeline.map((e) => e.kind), ['placed']);
     await thandi.payOrder(order.id);
-    const desk = await s.staff('desk@example.com');
+    const desk = await s.staff('content@example.com');
     const find = async (id: string) => ((await desk('GET', '/admin/v1/orders')).body as any[]).find((o) => o.id === id);
 
     assert.equal((await desk('POST', `/admin/v1/orders/${order.id}/advance`, { note: 'Wrapped in tissue, with a handwritten card.' })).status, 204);

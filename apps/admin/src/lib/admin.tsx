@@ -8,7 +8,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react';
 import { ApiError, createAdminApi, toApiError } from '@quintara/api-client';
 import type { AdminApi, StaffMarket, StaffSession } from '@quintara/api-client';
-import { staffCan } from '@quintara/domain';
+import { STAFF_ROLE_LABELS, staffCan, staffCanAny } from '@quintara/domain';
 import type { StaffPermission } from '@quintara/domain';
 
 interface AdminContextValue {
@@ -65,29 +65,30 @@ export function Loaded<T>({ state, children }: { state: { data?: T; error?: ApiE
   return <>{children(state.data as T)}</>;
 }
 
-const NAV: [href: string, label: string, permission: StaffPermission][] = [
-  ['/', 'Overview', 'admin.experiences.manage'],
-  ['/cities', 'Cities', 'admin.markets.manage'],
-  ['/applications', 'Applications', 'admin.applications.review'],
-  ['/questions', 'Application questions', 'admin.applications.review'],
-  ['/members', 'Members', 'admin.members.manage'],
-  ['/tiers', 'Tiers', 'admin.finance.manage'],
-  ['/payments', 'Payments', 'admin.finance.manage'],
-  ['/renewals', 'Renewals', 'admin.finance.manage'],
-  ['/experiences', 'Experiences', 'admin.experiences.manage'],
-  ['/concierge', 'Concierge', 'admin.concierge.manage'],
-  ['/business', 'Business', 'admin.business.manage'],
-  ['/partners', 'Partners', 'admin.content.manage'],
-  ['/services', 'Services', 'admin.concierge.manage'],
-  ['/orders', 'Maison orders', 'admin.content.manage'],
-  ['/boutique', 'Maison Quintara', 'admin.content.manage'],
-  ['/tv', 'Quintara TV', 'admin.content.manage'],
-  ['/home', 'Home page', 'admin.content.manage'],
-  ['/descriptions', 'Descriptions', 'admin.content.manage'],
-  ['/check-in', 'Check-in', 'admin.bookings.manage'],
-  ['/insights', 'Insights', 'admin.members.manage'],
-  ['/staff', 'Staff accounts', 'admin.staff.manage'],
-  ['/audit', 'Audit log', 'admin.experiences.manage'],
+/** Each page and who may open it: any one of its permissions, or every member of staff (none listed). */
+const NAV: [href: string, label: string, permissions: StaffPermission[]][] = [
+  ['/', 'Overview', []],
+  ['/cities', 'Cities', ['admin.markets.manage']],
+  ['/applications', 'Applications', ['admin.applications.review']],
+  ['/questions', 'Application questions', ['admin.applications.review']],
+  ['/members', 'Members', ['admin.members.manage']],
+  ['/tiers', 'Tiers', ['admin.finance.manage']],
+  ['/payments', 'Payments', ['admin.finance.manage']],
+  ['/renewals', 'Renewals', ['admin.finance.manage']],
+  ['/experiences', 'Experiences', ['admin.experiences.manage']],
+  ['/concierge', 'Concierge', ['admin.concierge.manage']],
+  ['/business', 'Business', ['admin.business.manage']],
+  ['/partners', 'Partners', ['admin.providers.manage']],
+  ['/services', 'Services', ['admin.concierge.manage', 'admin.providers.manage']],
+  ['/orders', 'Maison orders', ['admin.boutique.manage']],
+  ['/boutique', 'Maison Quintara', ['admin.boutique.manage']],
+  ['/tv', 'Quintara TV', ['admin.content.manage']],
+  ['/home', 'Home page', ['admin.content.manage']],
+  ['/descriptions', 'Descriptions', ['admin.content.manage']],
+  ['/check-in', 'Check-in', ['admin.bookings.manage']],
+  ['/insights', 'Insights', ['admin.insights.view']],
+  ['/staff', 'Staff accounts', ['admin.staff.manage']],
+  ['/audit', 'Audit log', []],
 ];
 
 /** Nothing renders until a staff session exists; otherwise the sign-in form is shown. */
@@ -177,12 +178,12 @@ export function AdminGate({ children }: { children: ReactNode }) {
             </label>
           ) : null}
           <nav aria-label="Admin">
-            {NAV.filter(([, , permission]) => staffCan(session.roles, permission)).map(([href, label]) => (
+            {NAV.filter(([, , permissions]) => !permissions.length || staffCanAny(session.roles, permissions)).map(([href, label]) => (
               <Link key={href} href={href} aria-current={(href === '/' ? pathname === '/' : pathname.startsWith(href)) ? 'page' : undefined}>{label}</Link>
             ))}
           </nav>
           <ThemeToggle />
-          <div className="who"><span>Signed in as {session.roles.includes('admin') ? 'administrator' : 'concierge desk'}</span><Link href="/security">Your security</Link><button className="link" onClick={signOut}>Sign out</button></div>
+          <div className="who"><span>Signed in as {session.roles[0] ? STAFF_ROLE_LABELS[session.roles[0]] : 'staff'}</span><Link href="/security">Your security</Link><button className="link" onClick={signOut}>Sign out</button></div>
         </aside>
         <main>
           {market && !market.isOpen ? <p className="notice" role="status">{market.name} is closed. What you add here is seen only by staff until the city is opened under Cities.</p> : null}

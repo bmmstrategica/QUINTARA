@@ -21,7 +21,7 @@ export async function seed(db: Db, options: { history?: boolean } = {}): Promise
     const market = await one(`INSERT INTO markets (city_id, slug, name, currency_code, opened_at) VALUES ($1, 'cape-town', 'Cape Town', 'ZAR', now()) RETURNING id`, [city]);
     await addDefaultPlans(tx, market, 'ZAR');
     // Staff accounts for development. They are not members.
-    for (const [email, role, name, title] of [['admin@example.com', 'admin', 'Nomsa Admin', 'Head of operations'], ['desk@example.com', 'concierge', 'Palesa Makam', 'Lifestyle Curator']] as const) {
+    for (const [email, role, name, title] of [['admin@example.com', 'admin', 'Nomsa Admin', 'Head of operations'], ['desk@example.com', 'concierge', 'Palesa Makam', 'Lifestyle Curator'], ['content@example.com', 'content', 'Lerato Content', 'Content and Maison Quintara']] as const) {
       const id = await one(`INSERT INTO users (email, status) VALUES ($1, 'active') RETURNING id`, [email]);
       await tx.query('INSERT INTO user_roles (user_id, role_key) VALUES ($1, $2)', [id, role]);
       await tx.query('INSERT INTO staff_accounts (user_id, full_name, title) VALUES ($1, $2, $3)', [id, name, title]);

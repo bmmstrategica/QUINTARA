@@ -106,7 +106,7 @@ export async function cancelMyServiceRequest(db: Db, ctx: RequestContext, id: st
 /* ---------- Services: staff ---------- */
 
 export async function listServicesForStaff(db: Queryable, ctx: RequestContext) {
-  requireStaff(ctx, 'admin.content.manage');
+  requireStaff(ctx, 'admin.providers.manage');
   const rows = await db.query(`SELECT s.*, (SELECT count(*) FROM service_requests r WHERE r.service_id = s.id) AS requests FROM lifestyle_services s WHERE s.market_id = $1 ORDER BY (s.status = 'archived'), s.position, s.name`, [ctx.marketId]);
   const packages = await packagesFor(db, rows.map((row) => row.id as string), false);
   return rows.map((row) => ({ ...toService(row, packages.get(row.id as string) ?? []), status: row.status as string, position: Number(row.position), requests: Number(row.requests) }));
@@ -117,7 +117,7 @@ export async function listServicesForStaff(db: Queryable, ctx: RequestContext) {
 const PACKAGE_COLUMNS: Record<string, string> = { name: 'name', description: 'description', priceMinor: 'price_minor', priceBasis: 'price_basis', leadTimeHours: 'lead_time_hours', duration: 'duration', position: 'position', status: 'status' };
 
 export async function createServicePackage(db: Db, ctx: RequestContext, serviceId: string, body: unknown): Promise<{ id: string }> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.providers.manage');
   const parsed = servicePackageInputSchema.safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   if (!UUID.test(serviceId) || !(await db.query('SELECT 1 FROM lifestyle_services WHERE id = $1', [serviceId]))[0]) throw notFound('This service does not exist.');
@@ -129,7 +129,7 @@ export async function createServicePackage(db: Db, ctx: RequestContext, serviceI
 }
 
 export async function updateServicePackage(db: Db, ctx: RequestContext, id: string, body: unknown): Promise<void> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.providers.manage');
   const parsed = servicePackageInputSchema.partial().safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   const data = parsed.data as Record<string, unknown>, sent = Object.keys(PACKAGE_COLUMNS).filter((key) => key in ((body ?? {}) as object) && data[key] !== undefined);
@@ -141,14 +141,14 @@ export async function updateServicePackage(db: Db, ctx: RequestContext, id: stri
 
 /** Requests keep the package's name and price as they were, so removing a package changes no record. */
 export async function deleteServicePackage(db: Db, ctx: RequestContext, id: string): Promise<void> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.providers.manage');
   const rows = UUID.test(id) ? await db.query('DELETE FROM service_packages WHERE id = $1 RETURNING id', [id]) : [];
   if (!rows[0]) throw notFound('This package does not exist.');
   await audit(db, staffId, 'service_package.deleted', 'service_package', id);
 }
 
 export async function createService(db: Db, ctx: RequestContext, marketId: string, body: unknown): Promise<{ id: string }> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.providers.manage');
   const parsed = lifestyleServiceInputSchema.safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   const d = parsed.data;
@@ -167,7 +167,7 @@ const SERVICE_COLUMNS: Record<string, string> = {
 };
 
 export async function updateService(db: Db, ctx: RequestContext, id: string, body: unknown): Promise<void> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.providers.manage');
   const parsed = lifestyleServiceInputSchema.partial().safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   const data = parsed.data as Record<string, unknown>, sent = Object.keys(SERVICE_COLUMNS).filter((key) => key in ((body ?? {}) as object) && data[key] !== undefined);

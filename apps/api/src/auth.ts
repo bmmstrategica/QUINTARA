@@ -43,7 +43,7 @@ async function eligible(db: Queryable, email: string, purpose: CodePurpose): Pro
   const user = (await db.query<{ id: string }>(`SELECT id FROM users WHERE lower(email) = lower($1) AND status IN ('active', 'pending') AND deleted_at IS NULL`, [email]))[0];
   if (purpose === 'join') return !user;
   if (!user) return false;
-  if (purpose === 'staff') return (await db.query(`SELECT 1 FROM user_roles r JOIN staff_accounts s ON s.user_id = r.user_id AND s.status = 'active' WHERE r.user_id = $1 AND r.role_key IN ('admin', 'concierge')`, [user.id])).length > 0;
+  if (purpose === 'staff') return (await db.query(`SELECT 1 FROM user_roles r JOIN staff_accounts s ON s.user_id = r.user_id AND s.status = 'active' WHERE r.user_id = $1 AND r.role_key IN (SELECT key FROM roles WHERE is_staff)`, [user.id])).length > 0;
   return true;
 }
 

@@ -88,14 +88,14 @@ const PRIVILEGE_COLUMNS: Record<string, string> = { title: 'title', details: 'de
 const sentKeys = (columns: Record<string, string>, body: unknown, data: Record<string, unknown>) => Object.keys(columns).filter((key) => key in ((body ?? {}) as object) && data[key] !== undefined);
 
 export async function listPartnersForStaff(db: Queryable, ctx: RequestContext) {
-  requireStaff(ctx, 'admin.content.manage');
+  requireStaff(ctx, 'admin.providers.manage');
   const partners = await db.query('SELECT * FROM partners WHERE market_id = $1 ORDER BY (status = \'archived\'), name', [ctx.marketId]);
   const privileges = (await db.query(`${SELECT_PRIVILEGE} ORDER BY v.created_at`, [null])).map(toPrivilege);
   return partners.map((row) => ({ ...toPartner(row, []), status: row.status as string, privileges: privileges.filter((v) => v.partnerId === row.id) }));
 }
 
 export async function createPartner(db: Db, ctx: RequestContext, marketId: string, body: unknown): Promise<{ id: string }> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.providers.manage');
   const parsed = partnerInputSchema.safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   const d = parsed.data;
@@ -108,7 +108,7 @@ export async function createPartner(db: Db, ctx: RequestContext, marketId: strin
 }
 
 export async function updatePartner(db: Db, ctx: RequestContext, id: string, body: unknown): Promise<void> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.providers.manage');
   const parsed = partnerInputSchema.partial().safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   const data = parsed.data as Record<string, unknown>, sent = sentKeys(PARTNER_COLUMNS, body, data);
@@ -119,7 +119,7 @@ export async function updatePartner(db: Db, ctx: RequestContext, id: string, bod
 }
 
 export async function createPrivilege(db: Db, ctx: RequestContext, partnerId: string, body: unknown): Promise<{ id: string }> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.providers.manage');
   const parsed = privilegeInputSchema.safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   if (!UUID.test(partnerId) || !(await db.query('SELECT 1 FROM partners WHERE id = $1', [partnerId]))[0]) throw notFound('This partner does not exist.');
@@ -132,7 +132,7 @@ export async function createPrivilege(db: Db, ctx: RequestContext, partnerId: st
 }
 
 export async function updatePrivilege(db: Db, ctx: RequestContext, id: string, body: unknown): Promise<void> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaff(ctx, 'admin.providers.manage');
   const parsed = privilegeInputSchema.partial().safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   const data = parsed.data as Record<string, unknown>, sent = sentKeys(PRIVILEGE_COLUMNS, body, data);

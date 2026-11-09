@@ -74,7 +74,7 @@ export function rangeFor(period: InsightPeriod, today: string, from?: string, to
 }
 
 export async function getInsights(db: Queryable, ctx: RequestContext, query: unknown = {}): Promise<Insights> {
-  requireStaff(ctx, 'admin.members.manage');
+  requireStaff(ctx, 'admin.insights.view');
   const parsed = querySchema.safeParse(query ?? {});
   if (!parsed.success) throw validation(parsed.error.issues);
   return insightsFor(db, ctx.marketId, parsed.data.period, parsed.data.from, parsed.data.to);
@@ -211,7 +211,7 @@ export async function insightsFor(db: Queryable, marketId: string, period: Insig
 
 /** The figures as a spreadsheet, one row per figure. Formula-looking text is neutralised. */
 export async function insightsCsv(db: Queryable, ctx: RequestContext, query: unknown): Promise<string> {
-  const staffId = requireStaff(ctx, 'admin.members.manage');
+  const staffId = requireStaff(ctx, 'admin.insights.view');
   const i = await getInsights(db, ctx, query);
   const cur = i.market.currency, money = (m: number) => (m / 100).toFixed(2);
   const rows: (string | number)[][] = [['Section', 'Figure', 'Value', 'Unit'], ['Period', `${i.period.from} to ${i.period.to}`, '', ''], ['City', i.market.name, '', '']];
@@ -285,11 +285,11 @@ export async function sendWeeklyReport(db: Db, mail: EmailProvider, adminUrl: st
 }
 
 export async function getReportSetting(db: Queryable, ctx: RequestContext): Promise<{ weeklyReport: boolean }> {
-  const staffId = requireStaff(ctx, 'admin.members.manage');
+  const staffId = requireStaff(ctx, 'admin.insights.view');
   return { weeklyReport: Boolean((await db.query<{ weekly_report: boolean }>('SELECT weekly_report FROM staff_accounts WHERE user_id = $1', [staffId]))[0]?.weekly_report) };
 }
 export async function setReportSetting(db: Queryable, ctx: RequestContext, body: unknown): Promise<{ weeklyReport: boolean }> {
-  const staffId = requireStaff(ctx, 'admin.members.manage');
+  const staffId = requireStaff(ctx, 'admin.insights.view');
   const parsed = z.object({ weeklyReport: z.boolean() }).safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   await db.query('UPDATE staff_accounts SET weekly_report = $2, updated_at = now() WHERE user_id = $1', [staffId, parsed.data.weeklyReport]);
@@ -298,7 +298,7 @@ export async function setReportSetting(db: Queryable, ctx: RequestContext, body:
 }
 /** Sends this week's report now, to the member of staff who asks only. */
 export async function sendReportToMe(db: Db, ctx: RequestContext, mail: EmailProvider, adminUrl: string): Promise<{ sent: boolean }> {
-  const staffId = requireStaff(ctx, 'admin.members.manage');
+  const staffId = requireStaff(ctx, 'admin.insights.view');
   const me = (await db.query<{ email: string; full_name: string }>(`SELECT u.email, s.full_name FROM staff_accounts s JOIN users u ON u.id = s.user_id WHERE s.user_id = $1`, [staffId]))[0];
   if (!me?.email) throw notFound('Your account has no email address.');
   const i = await insightsFor(db, ctx.marketId, '7d');

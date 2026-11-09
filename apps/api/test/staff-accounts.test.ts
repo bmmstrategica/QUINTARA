@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { startServer } from './harness.ts';
 
-test('admin console accounts: five at most, roles, suspension, and never without an administrator', async () => {
-  const s = await startServer();
+test('admin console accounts: a fixed number of seats, roles, suspension, and never without an administrator', async () => {
+  // Three sample accounts are seeded (administrator, concierge, content); six seats leave room for three more.
+  const s = await startServer({ staffSeats: 6 });
   try {
     const admin = await s.staff('admin@example.com');
     const list = await admin('GET', '/admin/v1/staff');
-    assert.deepEqual([list.status, list.body.seats], [200, { used: 2, total: 5 }]);
-    assert.deepEqual(list.body.staff.map((x: any) => [x.fullName, x.role, x.you]), [['Nomsa Admin', 'admin', true], ['Palesa Makam', 'concierge', false]]);
+    assert.deepEqual([list.status, list.body.seats], [200, { used: 3, total: 6 }]);
+    assert.deepEqual(list.body.staff.map((x: any) => [x.fullName, x.role, x.you]), [['Lerato Content', 'content', false], ['Nomsa Admin', 'admin', true], ['Palesa Makam', 'concierge', false]]);
 
     const add = (fullName: string, email: string, role: string, title = '') => admin('POST', '/admin/v1/staff', { fullName, email, role, title });
     assert.equal((await add('X', 'bad', 'admin')).status, 422);
@@ -18,7 +19,7 @@ test('admin console accounts: five at most, roles, suspension, and never without
     assert.equal((await add('Thandi Mokoena', 'thandi@example.com', 'concierge', 'Events')).status, 200);   // a member can also be staff
     assert.equal((await add('Thandi again', 'thandi@example.com', 'concierge')).status, 409);
     const full = await add('Ayanda Six', 'ayanda@quintara.test', 'concierge');
-    assert.deepEqual([full.status, full.body.message], [409, 'All 5 admin console accounts are in use. Suspend one before adding another.']);
+    assert.deepEqual([full.status, full.body.message], [409, 'All 6 admin console accounts are in use. Suspend one before adding another.']);
     assert.ok(s.email.sent.some((m) => m.to === 'lindiwe@quintara.test' && m.subject === 'Your Quintara admin console account' && !/password/i.test(m.text.replace('There is no password', ''))));
 
     // The concierge desk cannot manage accounts.
@@ -53,6 +54,44 @@ test('admin console accounts: five at most, roles, suspension, and never without
     assert.equal((await nomsa('GET', '/admin/v1/members')).status, 403);   // now the concierge desk
     assert.equal((await lindiwe('PATCH', `/admin/v1/staff/${ids['Lindiwe Khumalo']}`, { role: 'concierge' })).status, 403);
     assert.equal((await lindiwe('PATCH', `/admin/v1/staff/${ids['Nomsa Admin']}`, { role: 'admin', title: 'Head of operations' })).status, 204);
+  } finally { await s.close(); }
+});
+
+test('each staff role has the powers of its role and no more, checked by the server', async () => {
+  const s = await startServer({ staffSeats: 12 });
+  try {
+    const admin = await s.staff('admin@example.com');
+    const people = { executive: 'exec', membership: 'members', experiences: 'events', finance: 'money', support: 'help' } as const;
+    for (const [role, name] of Object.entries(people)) assert.equal((await admin('POST', '/admin/v1/staff', { fullName: `Staff ${name}`, email: `${name}@quintara.test`, role })).status, 200);
+    const as = async (name: string) => s.staff(`${name}@quintara.test`);
+    const status = async (who: Awaited<ReturnType<typeof as>>, url: string) => (await who('GET', url)).status;
+    // [route, the roles that may open it]
+    const matrix: [string, string[]][] = [
+      ['/admin/v1/staff', []],
+      ['/admin/v1/applications', ['executive', 'membership']],
+      ['/admin/v1/members', ['executive', 'membership']],
+      ['/admin/v1/payments', ['executive', 'finance']],
+      ['/admin/v1/insights', ['executive', 'finance']],
+      ['/admin/v1/experiences', ['executive', 'experiences']],
+      ['/admin/v1/concierge-requests', ['support']],
+      ['/admin/v1/partners', []],
+      ['/admin/v1/products', []],
+      ['/admin/v1/audit', ['executive', 'membership', 'experiences', 'finance', 'support']],
+    ];
+    for (const [role, name] of Object.entries(people)) {
+      const who = await as(name);
+      for (const [url, allowed] of matrix) assert.equal(await status(who, url), allowed.includes(role) ? 200 : 403, `${role} ${url}`);
+    }
+    // The content manager runs Maison Quintara, partners and services, but not members or money.
+    const content = await s.staff('content@example.com');
+    for (const url of ['/admin/v1/products', '/admin/v1/partners', '/admin/v1/services', '/admin/v1/tv/series']) assert.equal(await status(content, url), 200, url);
+    for (const url of ['/admin/v1/members', '/admin/v1/payments', '/admin/v1/insights']) assert.equal(await status(content, url), 403, url);
+    // Only the full audit log is for executives and administrators: everyone else sees their own entries.
+    const finance = await as('money');
+    assert.equal((await finance('GET', '/admin/v1/audit')).body.all, false);
+    assert.equal((await (await as('exec'))('GET', '/admin/v1/audit')).body.all, true);
+    // A role cannot be invented.
+    assert.equal((await admin('POST', '/admin/v1/staff', { fullName: 'Someone Else', email: 'else@quintara.test', role: 'owner' })).status, 422);
   } finally { await s.close(); }
 });
 

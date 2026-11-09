@@ -15,7 +15,7 @@
  */
 import sharp from 'sharp';
 import { z } from 'zod';
-import { audit, requireMember, requireStaff } from './context.ts';
+import { audit, requireMember, requireStaffAny } from './context.ts';
 import type { RequestContext } from './context.ts';
 import type { Queryable } from './db.ts';
 import { HttpError, notFound, validation } from './errors.ts';
@@ -158,15 +158,18 @@ export async function storeMemberImage(store: MediaStore, ctx: RequestContext, b
 export interface UploadedPhoto { id: string; path: string; width: number; height: number; bytes: number }
 
 /** Staff upload with the file sent as base64 JSON (small files, and older clients). */
+/** Photographs are added by whoever manages what they illustrate: content, Maison pieces, partners and services, experiences. */
+const PHOTO_PERMISSIONS = ['admin.content.manage', 'admin.boutique.manage', 'admin.providers.manage', 'admin.experiences.manage'] as const;
+
 export async function uploadImage(db: Queryable, store: MediaStore, ctx: RequestContext, body: unknown): Promise<UploadedPhoto> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaffAny(ctx, PHOTO_PERMISSIONS);
   const { contentType, bytes, options } = decodeJson(body, MAX_IMAGE_BYTES);
   return save(db, store, staffId, await processPhoto(bytes, contentType, options, MAX_IMAGE_BYTES));
 }
 
 /** Staff upload with the file sent as it is (the body is the image), and the options in the query string. Up to 40 MB. */
 export async function uploadPhoto(db: Queryable, store: MediaStore, ctx: RequestContext, contentType: string | undefined, body: unknown, query: Record<string, string | undefined>): Promise<UploadedPhoto> {
-  const staffId = requireStaff(ctx, 'admin.content.manage');
+  const staffId = requireStaffAny(ctx, PHOTO_PERMISSIONS);
   if (!Buffer.isBuffer(body) || body.length === 0) throw new HttpError(422, 'Choose a photograph.', { file: 'Missing' });
   const options = photoOptionsFromQuery(query);
   return save(db, store, staffId, await processPhoto(body, (contentType ?? '').split(';')[0]!.trim().toLowerCase(), options));

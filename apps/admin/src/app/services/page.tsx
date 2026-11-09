@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { StaffPartnerBooking, StaffService, StaffServicePackage, StaffServiceRequest } from '@quintara/api-client';
 import { CONCIERGE_SPECIALIST, leadTimeLabel, longDay, packagePriceLabel, PARTNER_BOOKING_STATUS_LABEL, PRICE_BASES, PRICE_BASIS_LABEL, SERVICE_REQUEST_STATUS_LABEL } from '@quintara/domain';
 import type { PriceBasis, PublishStatus, ServicePackageInput, ServiceRequestStatus } from '@quintara/domain';
-import { fmtDate, Loaded, useAdmin, useLoad, useRun } from '@/lib/admin';
+import { fmtDate, Loaded, useAdmin, useCan, useLoad, useRun } from '@/lib/admin';
 
 /** The directory details a service shares with partners: shown to members on Lifestyle. The contact details are for members only. */
 type Directory = Pick<StaffService, 'summary' | 'area' | 'website' | 'offer' | 'contactName' | 'contactEmail' | 'contactPhone' | 'address'>;
@@ -42,13 +42,16 @@ const NEXT: Partial<Record<ServiceRequestStatus, [ServiceRequestStatus, string][
 
 export default function ServicesPage() {
   const { api } = useAdmin();
-  const services = useLoad((client) => client.listServices());
-  const requests = useLoad((client) => client.listServiceRequests());
-  const partnerBookings = useLoad((client) => client.listPartnerBookings());
+  // The desk (requests and partner bookings) and the providers (the services themselves) can belong to different roles.
+  const canDesk = useCan('admin.concierge.manage'), canManage = useCan('admin.providers.manage');
+  const services = useLoad((client) => (canManage ? client.listServices() : Promise.resolve([])), [canManage]);
+  const requests = useLoad((client) => (canDesk ? client.listServiceRequests() : Promise.resolve([])), [canDesk]);
+  const partnerBookings = useLoad((client) => (canDesk ? client.listPartnerBookings() : Promise.resolve([])), [canDesk]);
   const { run, pending, error } = useRun();
   return (
     <>
       <div><h1>Lifestyle services</h1><p className="lede">Services that guests and members can ask to book. They appear with the partners in the Lifestyle directory, with the same directory details. Each request comes here for {CONCIERGE_SPECIALIST.shortName} and the concierge desk to arrange with the provider.</p></div>
+      {canDesk ? (<>
       <h2>Partner bookings sent by QÉRA</h2>
       <p className="muted">QÉRA writes to the partner's contact in the directory, and the partner confirms or declines through a private link. Nothing is needed here unless a partner telephones instead: then record their answer. A refusal comes to the concierge queue for an alternative.</p>
       <Loaded state={partnerBookings}>
@@ -68,6 +71,8 @@ export default function ServicesPage() {
           </table></div>
         )}
       </Loaded>
+      </>) : null}
+      {canManage ? (<>
       <div className="row" style={{ justifyContent: 'space-between' }}><h2>Services</h2><a className="btn" href="#new-service">Add service</a></div>
       <Loaded state={services}>
         {(list) => list.length === 0 ? <p className="note">No services yet.</p> : (
@@ -94,6 +99,7 @@ export default function ServicesPage() {
         {error ? <p className="error" role="alert">{error}</p> : null}
         <div><button className="btn" disabled={pending}>{pending ? 'Saving' : 'Add service'}</button></div>
       </form>
+      </>) : null}
     </>
   );
 }

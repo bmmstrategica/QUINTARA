@@ -555,7 +555,7 @@ test('boutique: the last item sells once, prices cannot be sent by the buyer, di
     assert.ok(b instanceof ApiError ? b.code === 'conflict' : b.status === 'paid');
     assert.equal(s.payments.charges.filter((c) => c.description.includes(order.orderNumber)).length, 1);
 
-    const desk = await s.staff('desk@example.com');
+    const desk = await s.staff('content@example.com');
     const queue = (await desk('GET', '/admin/v1/orders')).body;
     // Paid orders lead the queue; an order placed but not paid follows, with the time it lapses.
     assert.deepEqual(queue.map((o: any) => o.status), ['paid', 'awaiting_payment']);
@@ -632,7 +632,7 @@ test('tv: staff publish series and episodes; drafts stay hidden; progress is pri
   try {
     const thandi = s.client(), daniel = s.client(), guest = s.client();
     await thandi.signIn({ email: 'thandi@example.com' }); await daniel.signIn({ email: 'daniel@example.com' });
-    const desk = await s.staff('desk@example.com');
+    const desk = await s.staff('content@example.com');
     const cookie = (await s.app.inject({ method: 'POST', url: '/v1/session', payload: { email: 'sipho@example.com' } })).cookies.map((c) => `${c.name}=${c.value}`).join('; ');
     assert.equal((await s.app.inject({ method: 'GET', url: '/admin/v1/tv/series', headers: { cookie } })).statusCode, 401);   // an app session carries no staff powers
 
@@ -814,7 +814,7 @@ test('lifestyle desk: services, booking requests, the partner directory, home sl
   try {
     const thandi = s.client(), daniel = s.client(), guest = s.client();
     await thandi.signIn({ email: 'thandi@example.com' }); await daniel.signIn({ email: 'daniel@example.com' });
-    const admin = await s.staff('admin@example.com'), desk = await s.staff('desk@example.com');
+    const admin = await s.staff('admin@example.com'), desk = await s.staff('desk@example.com'), content = await s.staff('content@example.com');
 
     // Services: staff add and edit; a draft or archived one is not offered.
     const added = await desk('POST', '/admin/v1/services', { name: 'Cape Helicopters', description: 'Scenic flights.', category: 'Mobility' });
@@ -854,14 +854,14 @@ test('lifestyle desk: services, booking requests, the partner directory, home sl
     // Home slides: a photograph that was uploaded, or a film by https link; visitors see the active ones in order.
     const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
     const image = (await desk('POST', '/admin/v1/media', { contentType: 'image/png', dataBase64: png })).body;
-    assert.equal((await desk('POST', '/admin/v1/home-slides', { kind: 'video', videoUrl: 'http://insecure.example/film.mp4' })).status, 422);
-    assert.equal((await desk('POST', '/admin/v1/home-slides', { kind: 'image', imageId: '00000000-0000-4000-8000-000000000000' })).status, 422);
-    const photo = await desk('POST', '/admin/v1/home-slides', { kind: 'image', imageId: image.id, caption: 'Welcome', position: 2 });
-    const film = await desk('POST', '/admin/v1/home-slides', { kind: 'video', videoUrl: 'https://video.example/welcome.mp4', position: 1 });
+    assert.equal((await content('POST', '/admin/v1/home-slides', { kind: 'video', videoUrl: 'http://insecure.example/film.mp4' })).status, 422);
+    assert.equal((await content('POST', '/admin/v1/home-slides', { kind: 'image', imageId: '00000000-0000-4000-8000-000000000000' })).status, 422);
+    const photo = await content('POST', '/admin/v1/home-slides', { kind: 'image', imageId: image.id, caption: 'Welcome', position: 2 });
+    const film = await content('POST', '/admin/v1/home-slides', { kind: 'video', videoUrl: 'https://video.example/welcome.mp4', position: 1 });
     assert.deepEqual((await guest.listHomeSlides()).map((x) => [x.kind, x.src]), [['video', 'https://video.example/welcome.mp4'], ['image', image.path]]);
-    assert.equal((await desk('PATCH', `/admin/v1/home-slides/${film.body.id}`, { isActive: false })).status, 204);
+    assert.equal((await content('PATCH', `/admin/v1/home-slides/${film.body.id}`, { isActive: false })).status, 204);
     assert.deepEqual((await guest.listHomeSlides()).map((x) => x.kind), ['image']);
-    assert.equal((await desk('DELETE', `/admin/v1/home-slides/${photo.body.id}`)).status, 204);
+    assert.equal((await content('DELETE', `/admin/v1/home-slides/${photo.body.id}`)).status, 204);
     assert.deepEqual(await guest.listHomeSlides(), []);
     assert.equal((await thandi.listHomeSlides()).length, 0);
 
@@ -1181,7 +1181,7 @@ test('calendar: a real calendar address is checked, kept encrypted, never return
 test('descriptions: staff edit what introduces each section, members and guests read it, and it can be restored', async () => {
   const s = await startServer();
   try {
-    const admin = await s.staff('admin@example.com'), desk = await s.staff('desk@example.com');
+    const admin = await s.staff('admin@example.com'), desk = await s.staff('content@example.com');
     const visitor = s.client(), thandi = s.client();
     await thandi.signIn({ email: 'thandi@example.com' });
     const member = (await s.app.inject({ method: 'POST', url: '/v1/session', payload: { email: 'thandi@example.com' } })).cookies.map((c) => `${c.name}=${c.value}`).join('; ');
@@ -1191,7 +1191,7 @@ test('descriptions: staff edit what introduces each section, members and guests 
     const saved = await admin('PUT', '/admin/v1/content/sections/club', { summary: 'The people of Quintara', description: 'Founders, investors, creatives and executives, each approved by Quintara.' });
     assert.equal(saved.status, 200);
     assert.ok(saved.body.updatedAt);
-    // The concierge desk looks after content too.
+    // The Content Manager looks after the descriptions.
     assert.equal((await desk('PUT', '/admin/v1/content/sections/curator', { summary: 'Lifestyle Curator, Private Client Services', description: 'Palesa arranges what you ask to book.' })).status, 200);
     // The sections added in migration 0024 are stored the same way.
     assert.equal((await admin('PUT', '/admin/v1/content/sections/relationship', { summary: 'Relationship Manager, BMM Capital', description: 'Wayne helps you pursue the opportunities you choose.' })).status, 200);

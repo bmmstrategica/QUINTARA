@@ -78,8 +78,12 @@ export function can(session: Pick<Session, 'roles'> | null, permission: Permissi
 
 /* ---------- Staff ---------- */
 
-/** Staff roles are separate from member roles: a staff account need not be a member. */
-export const STAFF_ROLES = ['admin', 'concierge'] as const;
+/**
+ * Staff roles are separate from member roles: a staff account need not be a member. Each account has one role.
+ * Role keys are stored in the database; `admin` is the Super Administrator and `concierge` the Concierge Manager
+ * (the keys predate the full set of roles and are kept so stored accounts keep their meaning).
+ */
+export const STAFF_ROLES = ['admin', 'executive', 'membership', 'experiences', 'concierge', 'finance', 'content', 'support'] as const;
 export type StaffRole = (typeof STAFF_ROLES)[number];
 
 export const STAFF_PERMISSIONS = [
@@ -88,10 +92,16 @@ export const STAFF_PERMISSIONS = [
   'admin.experiences.manage',
   'admin.bookings.manage',
   'admin.concierge.manage',
-  // Prices and money: membership tiers and the payments ledger.
+  // Prices and money: membership tiers, the payments ledger and renewals.
   'admin.finance.manage',
-  // Partners, privileges and other published content.
+  // Published content: Quintara TV, the home page and section descriptions.
   'admin.content.manage',
+  // Lifestyle partners, their privileges, and the lifestyle services with their packages (the service providers).
+  'admin.providers.manage',
+  // Maison Quintara: pieces, stock, delivery methods and orders.
+  'admin.boutique.manage',
+  // Business performance: the dashboard figures and Insights (counts and totals only, never names).
+  'admin.insights.view',
   // Reviewing business listings and making introductions.
   'admin.business.manage',
   // Opening and closing cities.
@@ -103,14 +113,49 @@ export const STAFF_PERMISSIONS = [
 ] as const;
 export type StaffPermission = (typeof STAFF_PERMISSIONS)[number];
 
-const STAFF_ROLE_PERMISSIONS: Record<StaffRole, StaffPermission[]> = {
+/** What each role may do. The server checks these on every request; the console only hides what would be refused. */
+export const STAFF_ROLE_PERMISSIONS: Readonly<Record<StaffRole, readonly StaffPermission[]>> = {
+  // Super Administrator: everything, including staff accounts, cities and the full audit log.
   admin: [...STAFF_PERMISSIONS],
-  // The desk runs experiences and guest lists; it does not decide who becomes a member.
-  concierge: ['admin.experiences.manage', 'admin.bookings.manage', 'admin.concierge.manage', 'admin.content.manage'],
+  // Executive Administrator: runs the club day to day and sees the whole picture; does not manage staff or cities.
+  executive: ['admin.insights.view', 'admin.audit.view', 'admin.applications.review', 'admin.members.manage', 'admin.finance.manage', 'admin.business.manage', 'admin.experiences.manage', 'admin.bookings.manage'],
+  // Membership Manager: applications, the application form, members and their roles.
+  membership: ['admin.applications.review', 'admin.members.manage'],
+  // Experiences Manager: experiences, pricing and availability, guest lists, reservations and check-in.
+  experiences: ['admin.experiences.manage', 'admin.bookings.manage'],
+  // Concierge Manager: the concierge desk, service requests, partner bookings and the service providers.
+  concierge: ['admin.concierge.manage', 'admin.providers.manage', 'admin.bookings.manage', 'admin.experiences.manage'],
+  // Finance Manager: tiers and fees, the payments ledger, renewals, and the figures.
+  finance: ['admin.finance.manage', 'admin.insights.view'],
+  // Content Manager: what members read and see: TV, the home page, descriptions, partners and services, Maison Quintara.
+  content: ['admin.content.manage', 'admin.providers.manage', 'admin.boutique.manage'],
+  // Support Administrator: helps members with requests and at the door.
+  support: ['admin.concierge.manage', 'admin.bookings.manage'],
+};
+
+export const STAFF_ROLE_LABELS: Readonly<Record<StaffRole, string>> = {
+  admin: 'Super Administrator', executive: 'Executive Administrator', membership: 'Membership Manager', experiences: 'Experiences Manager',
+  concierge: 'Concierge Manager', finance: 'Finance Manager', content: 'Content Manager', support: 'Support Administrator',
+};
+
+export const STAFF_ROLE_NOTES: Readonly<Record<StaffRole, string>> = {
+  admin: 'Everything, including staff accounts, cities, money and the full audit log.',
+  executive: 'The dashboard and Insights, applications, members, money, Business, experiences and the full audit log. Not staff accounts or cities.',
+  membership: 'Applications, the application questions, members, their roles and member reports.',
+  experiences: 'Experiences, pricing and availability, guest lists, reservations and check-in.',
+  concierge: 'Concierge requests, service requests, partner bookings, partners and services, experiences, guest lists and check-in.',
+  finance: 'Membership tiers and fees, the payments ledger, renewals, the dashboard and Insights.',
+  content: 'Quintara TV, the home page, descriptions, partners and services, and Maison Quintara with its orders.',
+  support: 'Concierge and service requests, guest lists and check-in.',
 };
 
 export function staffCan(roles: readonly StaffRole[], permission: StaffPermission): boolean {
-  return roles.some((role) => STAFF_ROLE_PERMISSIONS[role].includes(permission));
+  return roles.some((role) => STAFF_ROLE_PERMISSIONS[role]?.includes(permission));
+}
+
+/** True when any of the roles holds any of the permissions. */
+export function staffCanAny(roles: readonly StaffRole[], permissions: readonly StaffPermission[]): boolean {
+  return permissions.some((permission) => staffCan(roles, permission));
 }
 
 /* ---------- Session ---------- */

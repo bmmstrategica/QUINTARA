@@ -48,7 +48,7 @@ test('cropping a photograph in use: the stored photograph is opened from the adm
     const upload = (bytes: Buffer, query = '') => s.app.inject({ method: 'POST', url: '/admin/v1/photos' + query, headers: { cookie: staffCookie, 'content-type': 'image/jpeg' }, payload: bytes });
     const original = await sharp({ create: { width: 3200, height: 1800, channels: 3, background: '#335577' } }).jpeg().toBuffer();
     const first = JSON.parse((await upload(original)).body);
-    const desk = await s.staff('desk@example.com');
+    const desk = await s.staff('content@example.com');
     const slide = (await desk('POST', '/admin/v1/home-slides', { kind: 'image', imageId: first.id })).body as { id: string };
 
     // The console fetches the full-size stored photograph from its own origin, asking for JPEG or PNG only.

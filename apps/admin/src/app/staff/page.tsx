@@ -7,14 +7,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import type { StaffAccount } from '@quintara/api-client';
+import { STAFF_ROLE_LABELS, STAFF_ROLE_NOTES, STAFF_ROLES } from '@quintara/domain';
 import type { StaffRole } from '@quintara/domain';
 import { fmtDate, Loaded, useAdmin, useLoad, useRun } from '@/lib/admin';
 
-const ROLE: Record<StaffRole, string> = { admin: 'Administrator', concierge: 'Concierge desk' };
-const ROLE_NOTE: Record<StaffRole, string> = {
-  admin: 'Everything, including members, money, cities, staff accounts and the full audit log.',
-  concierge: 'Experiences, guest lists, check-in, concierge requests, services and content. Not members, money or staff.',
-};
+const ROLE = STAFF_ROLE_LABELS;
+const ROLE_NOTE = STAFF_ROLE_NOTES;
 
 export default function StaffPage() {
   const staff = useLoad((client) => client.listStaff());
@@ -56,8 +54,8 @@ function StaffRow({ account: s, onChanged }: { account: StaffAccount; onChanged:
         <td>{s.fullName}{s.you ? <span className="chip" style={{ marginLeft: 8 }}>You</span> : null}<small>{s.email}</small><small>{s.title}</small>{error ? <small className="error" role="alert">{error}</small> : null}</td>
         <td>
           <select className="small" aria-label={`Role of ${s.fullName}`} value={s.role} disabled={pending || s.you || s.status !== 'active'}
-            onChange={(event) => change({ role: event.target.value as StaffRole }, `Make ${s.fullName} ${event.target.value === 'admin' ? 'an administrator' : 'part of the concierge desk'}? ${ROLE_NOTE[event.target.value as StaffRole]} They are signed out of the console and sign in again with the new role.`)}>
-            {(Object.keys(ROLE) as StaffRole[]).map((r) => <option key={r} value={r}>{ROLE[r]}</option>)}
+            onChange={(event) => change({ role: event.target.value as StaffRole }, `Make ${s.fullName} ${ROLE[event.target.value as StaffRole]}? ${ROLE_NOTE[event.target.value as StaffRole]} They are signed out of the console and sign in again with the new role.`)}>
+            {STAFF_ROLES.map((r) => <option key={r} value={r}>{ROLE[r]}</option>)}
           </select>
         </td>
         <td><span className={`chip ${s.twoFactor ? 'ok' : 'gold'}`}>{s.twoFactor ? 'On' : 'At first sign-in'}</span></td>
@@ -102,14 +100,14 @@ function AddStaff({ full, onAdded }: { full: boolean; onAdded: () => void }) {
       <form className="panel" aria-label="Add an account" onSubmit={(event) => {
         event.preventDefault();
         const form = event.currentTarget, f = new FormData(form), text = (k: string) => String(f.get(k) ?? '').trim();
-        if (!window.confirm(`Give ${text('fullName')} ${role === 'admin' ? 'administrator' : 'concierge desk'} access to the admin console? They are emailed how to sign in.`)) return;
+        if (!window.confirm(`Give ${text('fullName')} ${ROLE[role]} access to the admin console? They are emailed how to sign in.`)) return;
         void run(() => api.addStaff({ fullName: text('fullName'), email: text('email'), title: text('title'), role }), () => { form.reset(); setRole('concierge'); onAdded(); });
       }}>
         <div className="form">
           <label>Full name<input name="fullName" required minLength={2} maxLength={120} disabled={full} /></label>
           <label>Work email address<input name="email" type="email" required maxLength={200} disabled={full} /></label>
           <label>Title (optional)<input name="title" maxLength={80} disabled={full} placeholder="Membership director" /></label>
-          <label>Role<select value={role} disabled={full} onChange={(event) => setRole(event.target.value as StaffRole)}>{(Object.keys(ROLE) as StaffRole[]).map((r) => <option key={r} value={r}>{ROLE[r]}</option>)}</select></label>
+          <label>Role<select value={role} disabled={full} onChange={(event) => setRole(event.target.value as StaffRole)}>{STAFF_ROLES.map((r) => <option key={r} value={r}>{ROLE[r]}</option>)}</select></label>
         </div>
         <p className="note">{ROLE_NOTE[role]}</p>
         <p className="muted" style={{ fontSize: 13.5 }}>They sign in at the admin console with this address: a one-time code is emailed to them, and at the first sign-in they set up two-factor. There is no password.</p>

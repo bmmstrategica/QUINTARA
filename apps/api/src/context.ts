@@ -4,7 +4,7 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomBytes } from 'node:crypto';
-import { can, ROLES, STAFF_ROLES, staffCan } from '@quintara/domain';
+import { can, ROLES, STAFF_ROLES, staffCan, staffCanAny } from '@quintara/domain';
 import type { GuestAccount, Permission, Role, Session, StaffPermission, StaffRole } from '@quintara/domain';
 import type { Queryable } from './db.ts';
 import { forbidden, unauthenticated } from './errors.ts';
@@ -168,6 +168,20 @@ export async function loadStaffRoles(db: Queryable, userId: string): Promise<Sta
 export function requireStaff(ctx: RequestContext, permission: StaffPermission): string {
   if (!ctx.userId) throw unauthenticated();
   if (!staffCan(ctx.staffRoles, permission)) throw forbidden('This is for Quintara staff.');
+  return ctx.userId;
+}
+
+/** Like requireStaff, for actions that any one of several permissions allows (a photograph upload, say). */
+export function requireStaffAny(ctx: RequestContext, permissions: readonly StaffPermission[]): string {
+  if (!ctx.userId) throw unauthenticated();
+  if (!staffCanAny(ctx.staffRoles, permissions)) throw forbidden('This is for Quintara staff.');
+  return ctx.userId;
+}
+
+/** Any active member of staff, whatever their role: for what every console user has (their own audit entries, say). */
+export function requireAnyStaff(ctx: RequestContext): string {
+  if (!ctx.userId) throw unauthenticated();
+  if (!ctx.staffRoles.length) throw forbidden('This is for Quintara staff.');
   return ctx.userId;
 }
 

@@ -17,10 +17,10 @@
  *    entry is detected by the integrity check.
  *  - Administrators see everyone's entries and can export them; each member of staff can see their own.
  */
-import { STAFF_ROLES } from '@quintara/domain';
+import { STAFF_ROLE_LABELS, STAFF_ROLES, staffCan } from '@quintara/domain';
 import type { StaffRole } from '@quintara/domain';
 import { z } from 'zod';
-import { audit, requireStaff, revokeAllSessions } from './context.ts';
+import { audit, requireAnyStaff, requireStaff, revokeAllSessions } from './context.ts';
 import type { RequestContext } from './context.ts';
 import type { Db, Queryable } from './db.ts';
 import type { EmailProvider } from './email.ts';
@@ -35,13 +35,14 @@ export interface StaffAccount {
 }
 
 const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
-const roleOf = (roles: string[]): StaffRole => (roles.includes('admin') ? 'admin' : 'concierge');
+/** An account's one staff role (the most powerful, should an old account hold two). */
+const roleOf = (roles: string[]): StaffRole => STAFF_ROLES.find((role) => roles.includes(role)) ?? 'support';
 
 export async function listStaff(db: Queryable, ctx: RequestContext, seats: number) {
   const me = requireStaff(ctx, 'admin.staff.manage');
   const rows = await db.query(`
     SELECT s.user_id, s.full_name, s.title, s.status, s.created_at, s.last_sign_in_at, u.email,
-           COALESCE((SELECT array_agg(r.role_key) FROM user_roles r WHERE r.user_id = s.user_id AND r.role_key IN ('admin', 'concierge')), '{}') AS roles,
+           COALESCE((SELECT array_agg(r.role_key) FROM user_roles r WHERE r.user_id = s.user_id AND r.role_key IN (SELECT key FROM roles WHERE is_staff)), '{}') AS roles,
            EXISTS (SELECT 1 FROM user_mfa m WHERE m.user_id = s.user_id AND m.confirmed_at IS NOT NULL) AS two_factor,
            (SELECT max(a.occurred_at) FROM staff_activity a WHERE a.user_id = s.user_id) AS last_active
       FROM staff_accounts s JOIN users u ON u.id = s.user_id
@@ -96,7 +97,7 @@ export async function addStaff(db: Db, mail: EmailProvider, ctx: RequestContext,
     await mail.send({
       to: d.email,
       subject: 'Your Quintara admin console account',
-      text: `Dear ${d.fullName.split(' ')[0]},\n\nYou have been given an account on the Quintara admin console, as ${d.role === 'admin' ? 'an administrator' : 'a member of the concierge desk'}.\n\nSign in at ${adminUrl} with this email address. We will email you a one-time code, and at your first sign-in you will set up an authenticator app on your phone for two-factor authentication. There is no password.\n\nIf you were not expecting this, you can ignore this email.\n\nQuintara`,
+      text: `Dear ${d.fullName.split(' ')[0]},\n\nYou have been given an account on the Quintara admin console, with the role of ${STAFF_ROLE_LABELS[d.role]}.\n\nSign in at ${adminUrl} with this email address. We will email you a one-time code, and at your first sign-in you will set up an authenticator app on your phone for two-factor authentication. There is no password.\n\nIf you were not expecting this, you can ignore this email.\n\nQuintara`,
     });
   } catch { /* the account stands; the person can still sign in */ }
   return { userId };
@@ -115,8 +116,8 @@ export async function updateStaff(db: Db, ctx: RequestContext, seats: number, us
     if (!current) throw notFound('This account does not exist.');
     const roles = (await tx.query<{ role_key: string }>(`SELECT role_key FROM user_roles WHERE user_id = $1`, [userId])).map((r) => r.role_key);
     const wasAdmin = roles.includes('admin');
-    const losingAdmin = wasAdmin && current.status === 'active' && (d.status === 'suspended' || d.role === 'concierge');
-    if (userId === me && (d.status === 'suspended' || d.role === 'concierge')) throw forbidden('Another administrator must change your own access.');
+    const losingAdmin = wasAdmin && current.status === 'active' && (d.status === 'suspended' || (d.role !== undefined && d.role !== 'admin'));
+    if (userId === me && (d.status === 'suspended' || (d.role !== undefined && d.role !== roleOf(roles)))) throw forbidden('Another administrator must change your own access.');
     if (losingAdmin && (await activeAdmins(tx)) <= 1) throw conflict('This is the last active administrator. Make someone else an administrator first.');
     if (d.status === 'active' && current.status !== 'active' && (await activeCount(tx)) >= seats) throw conflict(`All ${seats} admin console accounts are in use. Suspend one before reactivating another.`);
 
@@ -126,7 +127,7 @@ export async function updateStaff(db: Db, ctx: RequestContext, seats: number, us
     if (d.status !== undefined) { values.push(d.status); sets.push(`status = $${values.length}`); }
     if (sets.length) await tx.query(`UPDATE staff_accounts SET ${sets.join(', ')}, updated_at = now() WHERE user_id = $1`, values);
     if (d.role) {
-      await tx.query(`DELETE FROM user_roles WHERE user_id = $1 AND role_key IN ('admin', 'concierge')`, [userId]);
+      await tx.query(`DELETE FROM user_roles WHERE user_id = $1 AND role_key IN (SELECT key FROM roles WHERE is_staff)`, [userId]);
       await tx.query(`INSERT INTO user_roles (user_id, role_key) VALUES ($1, $2)`, [userId, d.role]);
     }
     // A suspension, or a change of role, takes effect at once: the person's console sessions end.
@@ -189,11 +190,11 @@ const describeRequest = (method: string, route: string) => {
 
 /** The log, newest first. Administrators see everyone; other staff see only their own entries. */
 export async function listAudit(db: Queryable, ctx: RequestContext, query: unknown) {
-  const me = requireStaff(ctx, 'admin.experiences.manage');
+  const me = requireAnyStaff(ctx);
   const parsed = filters.safeParse(query ?? {});
   if (!parsed.success) throw validation(parsed.error.issues);
   const f = parsed.data;
-  const all = ctx.staffRoles.includes('admin');
+  const all = staffCan(ctx.staffRoles, 'admin.audit.view');
   const staffFilter = all ? f.staff ?? null : me;
   const params: unknown[] = [staffFilter, f.from ?? null, f.to ?? null, f.before ?? null, f.limit, f.q ? `%${f.q.replace(/[%_\\]/g, '\\$&')}%` : null];
   const actions = f.kind === 'request' ? [] : await db.query(`
