@@ -1,0 +1,116 @@
+/** Five admin console accounts, managed by administrators, and the audit log of everything they do. */
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { startServer } from './harness.ts';
+
+test('admin console accounts: five at most, roles, suspension, and never without an administrator', async () => {
+  const s = await startServer();
+  try {
+    const admin = await s.staff('admin@example.com');
+    const list = await admin('GET', '/admin/v1/staff');
+    assert.deepEqual([list.status, list.body.seats], [200, { used: 2, total: 5 }]);
+    assert.deepEqual(list.body.staff.map((x: any) => [x.fullName, x.role, x.you]), [['Nomsa Admin', 'admin', true], ['Palesa Makam', 'concierge', false]]);
+
+    const add = (fullName: string, email: string, role: string, title = '') => admin('POST', '/admin/v1/staff', { fullName, email, role, title });
+    assert.equal((await add('X', 'bad', 'admin')).status, 422);
+    assert.equal((await add('Lindiwe Khumalo', 'lindiwe@quintara.test', 'admin', 'Membership director')).status, 200);
+    assert.equal((await add('Sipho Ndlovu', 'sipho.staff@quintara.test', 'concierge', 'Concierge')).status, 200);
+    assert.equal((await add('Thandi Mokoena', 'thandi@example.com', 'concierge', 'Events')).status, 200);   // a member can also be staff
+    assert.equal((await add('Thandi again', 'thandi@example.com', 'concierge')).status, 409);
+    const full = await add('Ayanda Six', 'ayanda@quintara.test', 'concierge');
+    assert.deepEqual([full.status, full.body.message], [409, 'All 5 admin console accounts are in use. Suspend one before adding another.']);
+    assert.ok(s.email.sent.some((m) => m.to === 'lindiwe@quintara.test' && m.subject === 'Your Quintara admin console account' && !/password/i.test(m.text.replace('There is no password', ''))));
+
+    // The concierge desk cannot manage accounts.
+    const desk = await s.staff('desk@example.com');
+    assert.equal((await desk('GET', '/admin/v1/staff')).status, 403);
+    assert.equal((await desk('POST', '/admin/v1/staff', { fullName: 'Someone', email: 'x@quintara.test', role: 'admin' })).status, 403);
+
+    // A new account signs in, with the powers of its role and no more.
+    const sipho = await s.staff('sipho.staff@quintara.test');
+    assert.equal((await sipho('GET', '/admin/v1/experiences')).status, 200);
+    assert.equal((await sipho('GET', '/admin/v1/members')).status, 403);
+    // Thandi's membership is untouched; her app session has no staff powers.
+    const thandi = s.client();
+    await thandi.signIn({ email: 'thandi@example.com' });
+    assert.ok(await thandi.getSession());
+
+    // Suspending ends the person's console session at once and stops them signing in. The seat is freed.
+    const ids = Object.fromEntries((await admin('GET', '/admin/v1/staff')).body.staff.map((x: any) => [x.fullName, x.userId]));
+    assert.equal((await admin('PATCH', `/admin/v1/staff/${ids['Sipho Ndlovu']}`, { status: 'suspended' })).status, 204);
+    assert.equal((await sipho('GET', '/admin/v1/experiences')).status, 401);
+    assert.equal((await s.app.inject({ method: 'POST', url: '/admin/v1/session', payload: { email: 'sipho.staff@quintara.test' } })).statusCode, 401);
+    assert.equal((await add('Ayanda Six', 'ayanda@quintara.test', 'concierge')).status, 200);
+    assert.equal((await admin('PATCH', `/admin/v1/staff/${ids['Sipho Ndlovu']}`, { status: 'active' })).status, 409);   // no seat to come back to
+
+    // Never without an administrator, and nobody changes their own access.
+    assert.equal((await admin('PATCH', `/admin/v1/staff/${ids['Nomsa Admin']}`, { role: 'concierge' })).status, 403);
+    assert.equal((await admin('PATCH', `/admin/v1/staff/${ids['Nomsa Admin']}`, { status: 'suspended' })).status, 403);
+    const lindiwe = await s.staff('lindiwe@quintara.test');
+    assert.equal((await lindiwe('PATCH', `/admin/v1/staff/${ids['Nomsa Admin']}`, { role: 'concierge' })).status, 204);
+    assert.equal((await admin('GET', '/admin/v1/members')).status, 401);   // the change of role signed her out of the console
+    const nomsa = await s.staff('admin@example.com');
+    assert.equal((await nomsa('GET', '/admin/v1/members')).status, 403);   // now the concierge desk
+    assert.equal((await lindiwe('PATCH', `/admin/v1/staff/${ids['Lindiwe Khumalo']}`, { role: 'concierge' })).status, 403);
+    assert.equal((await lindiwe('PATCH', `/admin/v1/staff/${ids['Nomsa Admin']}`, { role: 'admin', title: 'Head of operations' })).status, 204);
+  } finally { await s.close(); }
+});
+
+test('audit log: every action and request by each member of staff, append-only, checked by its hash chain, exported for auditors', async () => {
+  const s = await startServer();
+  try {
+    const admin = await s.staff('admin@example.com');
+    const desk = await s.staff('desk@example.com');
+    await admin('POST', '/admin/v1/staff', { fullName: '=HYPERLINK("http://evil")', email: 'formula@quintara.test', role: 'concierge' });
+    await admin('GET', '/admin/v1/members');
+    await desk('GET', '/admin/v1/experiences');
+
+    const log = await admin('GET', '/admin/v1/audit');
+    assert.equal(log.status, 200);
+    assert.equal(log.body.all, true);
+    const added = log.body.entries.find((e: any) => e.action === 'staff.added');
+    assert.deepEqual([added.staffName, added.summary, added.kind], ['Nomsa Admin', 'Added an admin console account', 'action']);
+    assert.ok(added.ip);
+    assert.ok(log.body.entries.some((e: any) => e.kind === 'request' && e.action === 'GET /admin/v1/members' && e.staffName === 'Nomsa Admin' && e.status === 200 && e.summary === 'Opened members'));
+    assert.ok(log.body.entries.some((e: any) => e.kind === 'request' && e.staffName === 'Palesa Makam'));
+    assert.ok(log.body.entries.some((e: any) => e.action === 'auth.staff_signed_in' && e.staffName === 'Palesa Makam'));
+
+    // One person's entries, by kind and date.
+    const deskId = log.body.staff.find((x: any) => x.fullName === 'Palesa Makam').userId;
+    const only = await admin('GET', `/admin/v1/audit?staff=${deskId}&kind=request&from=${new Date().toISOString().slice(0, 10)}`);
+    assert.ok(only.body.entries.length > 0 && only.body.entries.every((e: any) => e.staffId === deskId && e.kind === 'request'));
+    assert.equal((await admin('GET', '/admin/v1/audit?staff=not-an-id')).status, 422);
+
+    // The desk sees only its own activity, and cannot export or check the log.
+    const own = await desk('GET', `/admin/v1/audit?staff=${log.body.staff.find((x: any) => x.fullName === 'Nomsa Admin').userId}`);
+    assert.equal(own.body.all, false);
+    assert.ok(own.body.entries.length > 0 && own.body.entries.every((e: any) => e.staffId === deskId));
+    assert.equal((await desk('GET', '/admin/v1/audit/export')).status, 403);
+    assert.equal((await desk('POST', '/admin/v1/audit/verify')).status, 403);
+
+    // Export: CSV, formulas neutralised, and the export itself recorded. A name a spreadsheet would run as a formula:
+    await admin('PATCH', `/admin/v1/staff/${deskId}`, { fullName: '=HYPERLINK("http://evil","x")' });
+    const csv = await s.app.inject({ method: 'GET', url: '/admin/v1/audit/export', headers: { cookie: (await s.app.inject({ method: 'POST', url: '/admin/v1/session', payload: { email: 'admin@example.com' } })).cookies.map((c) => `${c.name}=${c.value}`).join('; ') } });
+    assert.equal(csv.statusCode, 200);
+    assert.match(String(csv.headers['content-type']), /text\/csv/);
+    assert.match(String(csv.headers['content-disposition']), /attachment; filename="quintara-audit-/);
+    assert.ok(csv.body.startsWith('"Time (UTC)","Staff","Kind"'));
+    assert.ok(!/(^|,)"[=+\-@]/m.test(csv.body));                          // no cell starts with a formula
+    assert.ok(csv.body.includes(`'=HYPERLINK`));                               // kept, but as text
+    assert.ok((await admin('GET', '/admin/v1/audit')).body.entries.some((e: any) => e.action === 'audit.exported'));
+
+    // Append-only, and the chain shows any tampering done behind the database's back.
+    await assert.rejects(s.db.query("UPDATE staff_activity SET route = 'nothing'"), /append-only/);
+    await assert.rejects(s.db.query('DELETE FROM staff_activity'), /append-only/);
+    await assert.rejects(s.db.query("UPDATE audit_logs SET action = 'tampered'"), /append-only/);
+    const intact = await admin('POST', '/admin/v1/audit/verify');
+    assert.deepEqual([intact.body.actions.intact, intact.body.requests.intact], [true, true]);
+    assert.ok(intact.body.actions.entries > 5 && intact.body.requests.entries > 3);
+    const victim = (await s.db.query<{ seq: string }>("SELECT seq FROM audit_logs WHERE action = 'staff.added'"))[0]!.seq;
+    await s.db.query('ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_append_only');
+    await s.db.query("UPDATE audit_logs SET changes = '{\"fullName\":\"Someone else\"}' WHERE seq = $1", [victim]);
+    await s.db.query('ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_append_only');
+    const broken = await admin('POST', '/admin/v1/audit/verify');
+    assert.deepEqual([broken.body.actions.intact, broken.body.actions.firstBrokenAt, broken.body.requests.intact], [false, Number(victim), true]);
+  } finally { await s.close(); }
+});

@@ -1,0 +1,32 @@
+{
+  "name": "@quintara/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --experimental-strip-types --watch src/server.ts",
+    "start": "node --experimental-strip-types src/server.ts",
+    "migrate": "node --experimental-strip-types src/migrate-cli.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "first-run": "node --experimental-strip-types src/setup-cli.ts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/cors": "^11.3.0",
+    "@quintara/api-client": "workspace:*",
+    "@quintara/domain": "workspace:*",
+    "fastify": "^5.12.5",
+    "pg": "^8.23.1",
+    "qrcode": "~1.5.4",
+    "sharp": "^0.35.5",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.23.1",
+    "@types/qrcode": "~1.5.6",
+    "typescript": "~6.0.3"
+  }
+}

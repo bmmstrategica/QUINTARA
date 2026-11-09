@@ -1,0 +1,20 @@
+-- Lifestyle services are classified like partners, so both read as one directory.
+ALTER TABLE lifestyle_services ADD COLUMN category TEXT NOT NULL DEFAULT 'Lifestyle' CHECK (char_length(category) BETWEEN 2 AND 60);
+UPDATE lifestyle_services SET category = 'Photography and Media' WHERE name = 'Suné Photography';
+UPDATE lifestyle_services SET category = 'Mobility' WHERE name = 'One&Only Yacht Charter';
+UPDATE lifestyle_services SET category = 'Home and Design' WHERE name = 'Vellora Interiors';
+UPDATE lifestyle_services SET category = 'Mobility' WHERE name = 'Elite Motion';
+UPDATE lifestyle_services SET category = 'Beauty and Style' WHERE name = 'Atelier Lunda';
+UPDATE lifestyle_services SET category = 'Wellness' WHERE name = 'Apex Performance';
+UPDATE lifestyle_services SET category = 'Dining' WHERE name = 'The Culinary House';
+UPDATE lifestyle_services SET category = 'Beauty and Style' WHERE name = 'Éclat Atelier';
+UPDATE lifestyle_services SET category = 'Wellness' WHERE name = 'Skye Health';
+UPDATE lifestyle_services SET category = 'Talent and Brand' WHERE name = 'Alpha Management';
+UPDATE lifestyle_services SET category = 'Talent and Brand' WHERE name = 'EliteReach Management';
+UPDATE lifestyle_services SET category = 'Business' WHERE name = 'BMM Capital';
+UPDATE lifestyle_services SET category = 'Photography and Media' WHERE name = 'TheFeed';
+UPDATE lifestyle_services SET category = 'Photography and Media' WHERE name = 'Nava Studios';
+UPDATE lifestyle_services SET category = 'Wellness' WHERE name = 'Novaderm Aesthetics';
+UPDATE lifestyle_services SET category = 'Wellness' WHERE name = 'Wonderland Cape Town';
+UPDATE lifestyle_services SET category = 'Wellness' WHERE name = 'Virgin Active Country Club';
+CREATE INDEX lifestyle_services_category_idx ON lifestyle_services (category, position);

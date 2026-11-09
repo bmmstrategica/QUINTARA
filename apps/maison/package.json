@@ -1,0 +1,25 @@
+{
+  "name": "@quintara/maison",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "start": "next start -p 3002",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@quintara/api-client": "workspace:*",
+    "@quintara/app-core": "workspace:*",
+    "@quintara/domain": "workspace:*",
+    "next": "^16.3.8",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "~19.2.2",
+    "@types/react-dom": "~19.2.2",
+    "typescript": "~6.0.3"
+  }
+}

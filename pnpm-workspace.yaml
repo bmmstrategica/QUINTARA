@@ -1,0 +1,15 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Native modules the Expo SDK 57 router pulls in, held at the versions SDK 57 is built and tested with
+# (node_modules/expo/bundledNativeModules.json). Newer majors are not supported by this SDK's native code.
+overrides:
+  react-native-reanimated: 4.5.1
+  react-native-worklets: 0.10.1
+  react-native-gesture-handler: ~2.32.0
+  "@react-native/metro-config": 0.86.3
+
+# sharp (photographs) ships prebuilt binaries; its install script only checks they are present.
+allowBuilds:
+  sharp: true

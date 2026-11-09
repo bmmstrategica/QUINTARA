@@ -1,0 +1,20 @@
+{
+  "name": "quintara",
+  "private": true,
+  "packageManager": "pnpm@12.9.1",
+  "scripts": {
+    "dev:web": "pnpm --filter @quintara/web dev",
+    "dev:mobile": "pnpm --filter @quintara/mobile start",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "dev:api": "pnpm --filter @quintara/api dev",
+    "dev:admin": "pnpm --filter @quintara/admin dev",
+    "dev:maison": "pnpm --filter @quintara/maison dev",
+    "build:store": "bash apps/mobile/scripts/build-store.sh"
+  },
+  "devDependencies": {
+    "turbo": "^2.11.7",
+    "typescript": "~6.0.3"
+  }
+}

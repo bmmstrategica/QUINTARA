@@ -1,0 +1,10 @@
+{
+  "name": "@quintara/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": { "typecheck": "tsc -p tsconfig.json", "test": "node --test --experimental-strip-types src/mock.test.ts" },
+  "dependencies": { "@quintara/domain": "workspace:*" },
+  "devDependencies": { "typescript": "~6.0.3", "@types/node": "^22.0.0" }
+}

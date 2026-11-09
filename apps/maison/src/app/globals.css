@@ -1,0 +1,210 @@
+/*
+ * Maison Quintara. Bottle green and brass on cool stone; a didone for names, Jost (Quintara's text face) for
+ * everything else. The one bold device is the arch: every piece sits in an arched vitrine, like a window on a
+ * Cape gable. Everything around it stays quiet.
+ */
+:root {
+  --green: #16302B;      /* the maison: hero, footer, primary buttons */
+  --green-deep: #0F2420;
+  --stone: #E6E7E1;      /* the page */
+  --pearl: #F6F6F2;      /* vitrines and sheets */
+  --ink: #1B1F1E;        /* text */
+  --muted: #5E6662;      /* secondary text, 5.6:1 on stone */
+  --brass: #A9875A;      /* hairlines and the one accent */
+  --brass-light: #D2B88E;/* brass on green */
+  --line: #CBCDC5;
+  --danger: #8C2F25;
+  --brand: 'Cinzel', 'Trajan Pro', 'Bodoni Moda', Georgia, serif; /* the face of the Quintara wordmark */
+  --display: 'Bodoni Moda', 'Didot', 'Bodoni 72', Georgia, serif;
+  --text: 'Jost', 'Helvetica Neue', Arial, sans-serif;
+  --arch: 999px 999px 0 0;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--stone); color: var(--ink); font: 300 1.0625rem/1.6 var(--text); -webkit-font-smoothing: antialiased; }
+img { display: block; max-width: 100%; }
+a { color: inherit; text-underline-offset: 0.2em; text-decoration-thickness: 1px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; }
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 1rem; top: 1rem; z-index: 50; background: var(--pearl); padding: 0.5rem 1rem; }
+h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; letter-spacing: -0.01em; }
+
+/* The name, Maison Quintara, is set in the wordmark's own face: capitals, the same weight and tracking, and the
+   wordmark image sized so its capitals are exactly as tall as the text's and sit on the same baseline. */
+.brandname { font-family: var(--brand); font-weight: 600; text-transform: uppercase; letter-spacing: 0.11em; line-height: 1; white-space: nowrap; }
+.brandname img.word { display: inline-block; width: auto; max-width: none; height: 1.045em; vertical-align: -0.297em; margin-left: 0.04em; filter: none; opacity: 1; }
+
+/* ---------- Bar ---------- */
+.bar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem clamp(1rem, 4vw, 3rem); background: color-mix(in srgb, var(--stone) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.bar .mark { display: flex; align-items: center; gap: 0.7rem; text-decoration: none; }
+.bar .mark img { width: 22px; filter: brightness(0) saturate(100%); opacity: 0.85; }
+.bar .mark .brandname { font-size: 1rem; }
+.bar .mark .brandname img.word { width: auto; height: 1.045em; filter: brightness(0) saturate(100%); opacity: 1; }
+.bar nav { display: flex; align-items: center; gap: clamp(0.6rem, 2vw, 1.6rem); font-size: 0.95rem; }
+.textbtn { background: none; border: 0; padding: 0.3rem 0; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 0.3em; transition: text-decoration-color 0.2s; }
+.textbtn:hover { text-decoration-color: currentColor; }
+.bagbtn { display: inline-flex; align-items: center; gap: 0.5rem; border: 1px solid var(--ink); border-radius: 999px; background: none; padding: 0.45rem 1rem; }
+.bagbtn b { font-weight: 500; min-width: 1ch; }
+
+/* ---------- Hero ---------- */
+.hero { background: var(--green); color: var(--pearl); display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: clamp(2rem, 6vw, 6rem); align-items: end; padding: clamp(3rem, 8vw, 6.5rem) clamp(1rem, 6vw, 5rem) 0; overflow: hidden; }
+.hero > div:first-child { container-type: inline-size; }
+.hero h1.brandname { font-size: min(5.4rem, 14.5cqi); line-height: 1.15; white-space: normal; }
+.hero h1.brandname img.word { display: block; margin: 0.12em 0 0; vertical-align: 0; }
+.hero p { max-width: 34rem; margin: 2rem 0 0; color: color-mix(in srgb, var(--pearl) 82%, transparent); font-size: 1.15rem; }
+.hero .actions { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin: 2.2rem 0 clamp(3rem, 7vw, 6rem); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 3rem; padding: 0 1.6rem; border-radius: 999px; border: 1px solid var(--green); background: var(--green); color: var(--pearl); font-weight: 400; letter-spacing: 0.01em; text-decoration: none; transition: background 0.2s, color 0.2s; }
+.btn:hover { background: var(--green-deep); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.light { background: var(--pearl); color: var(--green); border-color: var(--pearl); }
+.btn.light:hover { background: var(--brass-light); border-color: var(--brass-light); }
+.btn.ghost { background: none; color: inherit; border-color: currentColor; }
+.btn.wide { width: 100%; }
+
+/* The vitrine: the featured piece in a tall arch, rising from the bottom of the green band. */
+.vitrine { position: relative; align-self: end; justify-self: center; width: min(100%, 26rem); }
+.vitrine .arch { aspect-ratio: 3 / 4.1; border-radius: var(--arch); background: var(--pearl); outline: 1px solid var(--brass-light); outline-offset: 10px; }
+.vitrine .arch > * { border-radius: var(--arch); overflow: hidden; animation: rise 1.1s var(--ease) both; }
+.vitrine figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 1.2rem 0 1.6rem; color: color-mix(in srgb, var(--pearl) 85%, transparent); font-size: 0.95rem; }
+.vitrine figcaption b { font: 400 1.35rem/1.2 var(--display); color: var(--pearl); }
+@keyframes rise { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0 0 0 0); } }
+
+/* ---------- Pictures ---------- */
+.picture { width: 100%; height: 100%; object-fit: cover; }
+.placeholder { width: 100%; height: 100%; display: grid; place-items: center; background: radial-gradient(120% 90% at 50% 100%, #DCDDD5 0%, var(--pearl) 70%); }
+.placeholder img { width: 22%; opacity: 0.18; filter: brightness(0); }
+.placeholder.tone-1 { background: radial-gradient(120% 90% at 50% 100%, #C9D3CB 0%, #EEF1EC 72%); }
+.placeholder.tone-2 { background: radial-gradient(120% 90% at 50% 100%, #D9C7A6 0%, #F3EEE4 72%); }
+.placeholder.tone-3 { background: radial-gradient(120% 90% at 50% 100%, #2B4A43 0%, #16302B 75%); }
+.placeholder.tone-3 img { filter: brightness(0) invert(1); opacity: 0.22; }
+.placeholder.tone-4 { background: radial-gradient(120% 90% at 50% 100%, #CFCFC6 0%, #F1F1EC 72%); }
+
+/* ---------- Collection ---------- */
+.collection { padding: clamp(3.5rem, 8vw, 6rem) clamp(1rem, 6vw, 5rem); }
+.collection > header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 1.5rem 3rem; margin-bottom: 2.6rem; }
+.collection h2 { font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1; }
+.collection header p { margin: 0.8rem 0 0; color: var(--muted); max-width: 32rem; }
+.filters { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.filters button { border: 1px solid var(--line); background: none; border-radius: 999px; padding: 0.4rem 1rem; font-size: 0.92rem; color: var(--muted); }
+.filters button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15.5rem), 1fr)); gap: clamp(2rem, 4vw, 3.5rem) clamp(1.2rem, 3vw, 2.4rem); }
+.piece { display: flex; flex-direction: column; gap: 0.9rem; background: none; border: 0; padding: 0; text-align: left; }
+.piece .arch { position: relative; aspect-ratio: 3 / 4; border-radius: var(--arch); overflow: hidden; background: var(--pearl); }
+.piece .arch img.picture { transition: transform 0.9s var(--ease); }
+.piece:hover .arch img.picture { transform: scale(1.035); }
+.piece .flag { position: absolute; left: 50%; bottom: 0.9rem; transform: translateX(-50%); white-space: nowrap; background: var(--pearl); color: var(--ink); font-size: 0.8rem; padding: 0.25rem 0.8rem; border-radius: 999px; }
+.piece h3 { font-size: 1.35rem; line-height: 1.2; }
+.piece .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: 0.95rem; }
+.piece .price { color: var(--ink); white-space: nowrap; }
+.empty { padding: 3rem 0; color: var(--muted); }
+
+/* ---------- Sheets: a piece, the bag, signing in ---------- */
+.scrim { position: fixed; inset: 0; z-index: 40; background: rgba(15, 36, 32, 0.45); display: flex; justify-content: flex-end; animation: fade 0.25s ease both; }
+.sheet { width: min(100%, 34rem); height: 100%; overflow-y: auto; background: var(--pearl); padding: clamp(1.2rem, 4vw, 2.4rem); display: flex; flex-direction: column; gap: 1.2rem; animation: slide 0.35s var(--ease) both; }
+.sheet.wide { width: min(100%, 60rem); }
+.sheet .close { align-self: flex-end; }
+@keyframes fade { from { opacity: 0; } }
+@keyframes slide { from { transform: translateX(6%); opacity: 0; } }
+.detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(1.5rem, 4vw, 3rem); align-items: start; }
+.detail .arch { aspect-ratio: 3 / 4; border-radius: var(--arch); overflow: hidden; background: var(--stone); outline: 1px solid var(--brass); outline-offset: 8px; }
+.detail h2 { font-size: clamp(2rem, 4vw, 2.8rem); line-height: 1.05; }
+.maker { color: var(--muted); margin: 0.4rem 0 0; }
+.price-line { display: flex; align-items: baseline; gap: 0.8rem; margin: 1.2rem 0; font-size: 1.25rem; }
+.price-line s { color: var(--muted); font-size: 1rem; }
+.note { font-size: 0.92rem; color: var(--muted); margin: 0; }
+.field { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.92rem; color: var(--muted); }
+.field input, .field textarea, .field select { font: inherit; font-size: 1rem; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 0.75rem 0.9rem; }
+.field textarea { min-height: 5.5rem; resize: vertical; }
+.field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--green); }
+.options { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.options button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 0.45rem 1rem; }
+.options button[aria-pressed="true"] { border-color: var(--green); background: var(--green); color: var(--pearl); }
+.qty { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; }
+.qty button { width: 2.4rem; height: 2.4rem; border: 0; background: none; font-size: 1.1rem; }
+.qty span { min-width: 2ch; text-align: center; }
+.error { color: var(--danger); font-size: 0.92rem; margin: 0; }
+
+.bagline { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto; gap: 1rem; align-items: center; padding: 1rem 0; border-bottom: 1px solid var(--line); }
+.bagline .arch { aspect-ratio: 3 / 4; border-radius: var(--arch); overflow: hidden; background: var(--stone); }
+.bagline b { font: 400 1.1rem/1.25 var(--display); display: block; }
+.bagline small { color: var(--muted); }
+.totals { display: grid; grid-template-columns: 1fr auto; gap: 0.4rem 1rem; margin: 0; }
+.totals dt { color: var(--muted); }
+.totals dd { margin: 0; text-align: right; }
+.totals .total { font-family: var(--display); font-size: 1.4rem; color: var(--ink); }
+.delivery { display: flex; flex-direction: column; gap: 0.6rem; border: 0; padding: 0; margin: 0; }
+.delivery legend { font-size: 0.92rem; color: var(--muted); margin-bottom: 0.3rem; }
+.delivery label { display: flex; gap: 0.7rem; align-items: flex-start; }
+.delivery small { display: block; color: var(--muted); }
+.done { text-align: center; padding: 2rem 0; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+.done .arch { width: 9rem; aspect-ratio: 3 / 4; border-radius: var(--arch); background: var(--green); display: grid; place-items: center; }
+.done .arch img { width: 38%; filter: brightness(0) invert(1); opacity: 0.85; }
+.done h2 { font-size: 2.2rem; }
+
+/* ---------- Footer ---------- */
+.foot { background: var(--green); color: color-mix(in srgb, var(--pearl) 80%, transparent); padding: clamp(2.5rem, 6vw, 4rem) clamp(1rem, 6vw, 5rem); display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr)); gap: 2rem; font-size: 0.95rem; }
+.foot b { display: block; font: 400 1.8rem/1.1 var(--display); color: var(--pearl); margin-bottom: 0.8rem; }
+.foot .lockup { font: 600 1.3rem/1 var(--brand); letter-spacing: 0.11em; margin-bottom: 1rem; }
+.foot h3 { font: 500 0.95rem/1.4 var(--text); color: var(--brass-light); margin-bottom: 0.6rem; }
+.foot p { margin: 0 0 0.4rem; }
+
+@media (max-width: 820px) {
+  .hero { grid-template-columns: 1fr; padding-bottom: 0; }
+  .hero .actions { margin-bottom: 2.5rem; }
+  .vitrine { width: min(100%, 22rem); }
+  .detail { grid-template-columns: 1fr; }
+  .detail .arch { width: min(100%, 20rem); margin: 0 auto; }
+  .foot { grid-template-columns: 1fr; }
+  .bar nav .hide-sm { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  html { scroll-behavior: auto; }
+}
+.field .qty, .bagline .qty { align-self: flex-start; }
+.bagline small { display: block; }
+input[type="radio"], input[type="checkbox"] { accent-color: var(--green); }
+
+/* Small phones: the name stays on one line beside the bag. */
+@media (max-width: 520px) {
+  .bar { gap: 0.6rem; }
+  .bar .mark { gap: 0.5rem; }
+  .bar .mark img { width: 18px; }
+  .bar .mark .brandname { font-size: 0.74rem; letter-spacing: 0.08em; }
+  .bar nav { gap: 0.7rem; font-size: 0.88rem; }
+  .bar nav .textbtn { white-space: nowrap; }
+}
+@media (max-width: 420px) {
+  .bar .mark > img { display: none; } /* the emblem; the name alone carries the brand on the smallest phones */
+}
+
+/* ---------- Your orders: each order followed from placement to receipt ---------- */
+.done-actions { display: flex; flex-wrap: wrap; gap: 0.8rem; justify-content: center; }
+.sheet .orders { display: flex; flex-direction: column; gap: 1rem; }
+.sheet .order { border: 1px solid var(--line); border-radius: 6px; padding: 1.1rem 1.2rem; background: color-mix(in srgb, var(--stone) 35%, var(--pearl)); }
+.sheet .order-head { display: flex; justify-content: space-between; gap: 1rem; font-family: var(--display); font-size: 1.15rem; }
+.sheet .order-head b { font-weight: 400; }
+.sheet .order .muted { color: var(--muted); margin: 0.3rem 0 0.9rem; font-size: 0.95rem; }
+.track { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.track li { position: relative; padding: 0 0 1rem 1.7rem; color: var(--muted); font-size: 0.95rem; }
+.track li::before { content: ""; position: absolute; left: 0; top: 0.32rem; width: 0.7rem; height: 0.7rem; border-radius: 50%; border: 1px solid var(--muted); background: var(--pearl); z-index: 1; box-sizing: border-box; }
+.track li::after { content: ""; position: absolute; left: 0.33rem; top: 1rem; bottom: 0; width: 1px; background: var(--line); }
+.track li:last-child { padding-bottom: 0; }
+.track li:last-child::after { display: none; }
+.track li small { display: block; font-size: 0.82rem; color: var(--muted); }
+.track li.reached { color: var(--ink); }
+.track li.reached::before { background: var(--green); border-color: var(--green); }
+.track li.reached::after { background: var(--green); }
+.track li.next { color: var(--ink); }
+.track li.next::before { border-color: var(--brass); background: var(--brass); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brass) 25%, transparent); }
+.sheet .order .note { margin-top: 0.8rem; }
+
+/* Two-factor, at a member's sign-in */
+.sheet .stack { display: flex; flex-direction: column; gap: 1rem; }
+.sheet .qr { background: #fff; padding: 8px; border: 1px solid var(--line); border-radius: 6px; image-rendering: pixelated; align-self: flex-start; }
+.sheet code { font-size: 0.95rem; letter-spacing: 0.05em; word-break: break-all; }
+.sheet .codes { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 1.2rem; }
+.sheet .check { display: flex; gap: 0.6rem; align-items: center; }

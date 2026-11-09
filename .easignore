@@ -1,0 +1,13 @@
+# Left out of the upload to Expo's build service (the project is not a git repository).
+node_modules/
+**/node_modules/
+**/.next/
+**/.expo/
+**/.turbo/
+*.tsbuildinfo
+builds/
+mockups/
+.env
+.env.*
+!.env.example
+**/google-play-service-account.json
