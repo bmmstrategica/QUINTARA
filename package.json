@@ -12,7 +12,8 @@
     "dev:admin": "pnpm --filter @quintara/admin dev",
     "dev:maison": "pnpm --filter @quintara/maison dev",
     "build:store": "bash apps/mobile/scripts/build-store.sh",
-    "e2e": "playwright test --trace off"
+    "e2e": "playwright test --trace off",
+    "visual": "playwright test --config playwright.visual.config.ts --trace off"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

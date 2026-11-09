@@ -19,3 +19,4 @@ apps/mobile/android/
 test-results/
 playwright-report/
 next-env.d.ts
+playwright-visual-report/
