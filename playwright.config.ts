@@ -7,6 +7,8 @@ import { defineConfig, devices } from '@playwright/test';
 const api = 'http://localhost:4000';
 export default defineConfig({
   testDir: 'e2e',
+  // The visual comparison has its own config and server (playwright.visual.config.ts).
+  testIgnore: 'visual.spec.ts',
   timeout: 90_000,
   expect: { timeout: 20_000 },
   fullyParallel: false,

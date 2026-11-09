@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useResource } from '@quintara/app-core';
+import { useLive, useResource } from '@quintara/app-core';
 import { EmptyState, ResourceView } from '@/components/states';
 import { timeOf } from '@/components/thread';
 import { useSection } from '@/components/section-copy';
@@ -9,6 +9,7 @@ import { useSection } from '@/components/section-copy';
 export default function MessagesPage() {
   const messaging = useSection('messaging');
   const conversations = useResource((api) => api.listConversations());
+  useLive(conversations.refresh, 15000);
   return (
     <>
       <div className="head"><div><h2>Messages</h2><p className="lede">{messaging.description}</p></div></div>

@@ -174,3 +174,32 @@ test('a declined payment says so plainly and keeps the seats held', async ({ pag
   await page.goto(`${WEB}/bookings`);
   await expect(page.getByRole('button', { name: /^Pay R/ })).toBeVisible();
 });
+
+test('a message appears for the other member without reloading, with an unread dot in the header', async ({ browser }) => {
+  const body = `Shall we meet at the Aura Enclave? ${Date.now().toString(36)}`;
+  const aisha = await browser.newPage(), thandi = await browser.newPage();
+  await webSignIn(aisha, 'aisha@example.com');
+  await webSignIn(thandi, MEMBER);
+
+  // Aisha is reading elsewhere; then she opens her conversation with Thandi.
+  await aisha.goto(`${WEB}/experiences`);
+  await thandi.goto(`${WEB}/messages`);
+  await thandi.locator('main').locator('div, article, li').filter({ hasText: 'Aisha Parker' }).getByRole('link', { name: 'Open' }).last().click();
+  await thandi.getByLabel('Write a message').fill(body);
+  await thandi.getByRole('button', { name: /^Send/ }).click();
+  await expect(thandi.getByText(body)).toBeVisible();
+
+  // The unread dot reaches Aisha's header within the polling interval, without a reload.
+  const messagesLink = aisha.locator('nav[aria-label=Main] a[href="/messages"]');
+  await expect(messagesLink.locator('.dot')).toBeVisible({ timeout: 40_000 });
+  await expect(messagesLink).toContainText('unread');
+
+  // Open on both sides: Thandi's next message arrives on Aisha's screen by itself.
+  await messagesLink.click();
+  await aisha.locator('main').locator('div, article, li').filter({ hasText: 'Thandi Mokoena' }).getByRole('link', { name: 'Open' }).last().click();
+  await expect(aisha.getByText(body)).toBeVisible();
+  const reply = `See you there. ${Date.now().toString(36)}`;
+  await thandi.getByLabel('Write a message').fill(reply);
+  await thandi.getByRole('button', { name: /^Send/ }).click();
+  await expect(aisha.getByText(reply)).toBeVisible({ timeout: 15_000 });
+});

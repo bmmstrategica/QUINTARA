@@ -25,6 +25,8 @@ async function settle(page: Page) {
   // Loading shows grey skeleton bars; wait until every one has given way to content.
   await advanceUntil(page, async () => (await page.locator('.skeleton').count()) === 0);
   await expect(page.locator('.skeleton')).toHaveCount(0);
+  // Then a little longer, for what loads without a skeleton (the header's unread dots).
+  await page.clock.runFor(1000);
   await page.evaluate(() => document.fonts.ready);
 }
 const slug = (path: string) => (path === '/' ? 'home' : path.slice(1).replace(/\//g, '-'));

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useApi, useResource } from '@quintara/app-core';
+import { useApi, useLive, useResource } from '@quintara/app-core';
 import type { AppNotification } from '@quintara/domain';
 import { EmptyState, ResourceView } from '@/components/states';
 import { useSection } from '@/components/section-copy';
@@ -13,6 +13,7 @@ export default function NotificationsPage() {
   const api = useApi();
   const router = useRouter();
   const notifications = useResource((client) => client.listNotifications());
+  useLive(notifications.refresh, 30000);
   const intro = useSection('notifications');
 
   async function open(notification: AppNotification) {

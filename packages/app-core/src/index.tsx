@@ -200,10 +200,11 @@ export function usePermission(permission: Permission): boolean {
 
 /* ---------- Loading data ---------- */
 
+/** `reload` shows the loading state again; `refresh` fetches quietly, keeping what is on screen until new data arrives. */
 export type Resource<T> =
-  | { status: 'loading'; data: undefined; error: undefined; reload: () => void }
-  | { status: 'ready'; data: T; error: undefined; reload: () => void }
-  | { status: 'error'; data: undefined; error: ApiError; reload: () => void };
+  | { status: 'loading'; data: undefined; error: undefined; reload: () => void; refresh: () => void }
+  | { status: 'ready'; data: T; error: undefined; reload: () => void; refresh: () => void }
+  | { status: 'error'; data: undefined; error: ApiError; reload: () => void; refresh: () => void };
 
 /**
  * Loads data for a screen and reloads when `deps` or the signed-in user change.
@@ -215,24 +216,49 @@ export function useResource<T>(load: (api: QuintaraApi) => Promise<T>, deps: rea
   const [state, setState] = useState<{ status: 'loading' } | { status: 'ready'; data: T } | { status: 'error'; error: ApiError }>({ status: 'loading' });
   const loadRef = useRef(load);
   loadRef.current = load;
+  // Set by refresh(): the next load keeps the current data on screen instead of showing the loading state.
+  const quiet = useRef(false);
 
   useEffect(() => {
     if (sessionStatus === 'loading') return;
     let cancelled = false;
-    setState({ status: 'loading' });
+    const keep = quiet.current;
+    quiet.current = false;
+    if (!keep) setState({ status: 'loading' });
     loadRef.current(api).then(
       (data) => { if (!cancelled) setState({ status: 'ready', data }); },
-      (error: unknown) => { if (!cancelled) setState({ status: 'error', error: toApiError(error) }); },
+      // A quiet refresh that fails leaves the screen as it was; the next one tries again.
+      (error: unknown) => { if (!cancelled && !keep) setState({ status: 'error', error: toApiError(error) }); },
     );
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, session?.userId, guest?.userId, market?.id, sessionStatus, attempt, ...deps]);
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
+  const refresh = useCallback(() => { quiet.current = true; setAttempt((n) => n + 1); }, []);
 
-  if (state.status === 'ready') return { status: 'ready', data: state.data, error: undefined, reload };
-  if (state.status === 'error') return { status: 'error', data: undefined, error: state.error, reload };
-  return { status: 'loading', data: undefined, error: undefined, reload };
+  if (state.status === 'ready') return { status: 'ready', data: state.data, error: undefined, reload, refresh };
+  if (state.status === 'error') return { status: 'error', data: undefined, error: state.error, reload, refresh };
+  return { status: 'loading', data: undefined, error: undefined, reload, refresh };
+}
+
+/**
+ * Keeps a screen up to date: calls `refresh` every `everyMs` while the page is visible, and at once when the person
+ * comes back to it. Nothing is fetched while the tab or app is in the background.
+ */
+export function useLive(refresh: () => void, everyMs: number, enabled = true): void {
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  useEffect(() => {
+    if (!enabled || typeof document === 'undefined') return;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const start = () => { if (!timer) timer = setInterval(() => refreshRef.current(), everyMs); };
+    const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+    const onVisibility = () => { if (document.visibilityState === 'visible') { refreshRef.current(); start(); } else stop(); };
+    if (document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility); };
+  }, [everyMs, enabled]);
 }
 
 /* ---------- Performing actions ---------- */

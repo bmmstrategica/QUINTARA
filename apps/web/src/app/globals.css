@@ -27,6 +27,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .nav a { white-space: nowrap; padding: 0.45rem 0.75rem; text-decoration: none; color: var(--q-muted); border-bottom: 1px solid transparent; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; transition: color .2s var(--ease); }
 .nav a:hover { color: var(--q-ink); }
 .nav a[aria-current="page"] { color: var(--q-ink); border-bottom-color: var(--q-accent); }
+/* The hidden 'unread' text stays inside its link, so it never widens the page. */
+.nav a { position: relative; }
+.nav .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--q-accent); margin-left: 6px; vertical-align: 0.15em; }
 
 main { padding: clamp(1.5rem, 4vw, 3.5rem) clamp(1rem, 4vw, 3rem) 4rem; max-width: 1180px; margin: 0 auto; }
 .lede { font-size: 1.12rem; color: var(--q-muted); }
