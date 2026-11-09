@@ -183,7 +183,7 @@ Statuses: **Tested** = implemented and tested. **Credentials** = implemented, aw
 
 ## 7. GitHub and approvals
 
-- Branch `claude/gifted-wright-qapo61`, 7 commits on the initial commit `3aeb174`. No pull request opened yet; nothing
+- Branch `claude/gifted-wright-qapo61`, 9 commits on the initial commit `3aeb174`. No pull request opened yet; nothing
   merged. CI runs on push once the workflow is on GitHub.
 - **Decisions and approvals needed from Quintara:** the payment provider (for example Peach Payments, Paystack or
   Stripe) and merchant credentials; hosting accounts and DNS; Resend; whether QÉRA should use Claude (and an
