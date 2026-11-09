@@ -82,3 +82,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -f apps/api/Dockerfile -t quintara-api:ci .
+
+  e2e:
+    name: End-to-end journeys (web, admin, API)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/

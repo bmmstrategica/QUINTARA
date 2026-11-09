@@ -11,9 +11,11 @@
     "dev:api": "pnpm --filter @quintara/api dev",
     "dev:admin": "pnpm --filter @quintara/admin dev",
     "dev:maison": "pnpm --filter @quintara/maison dev",
-    "build:store": "bash apps/mobile/scripts/build-store.sh"
+    "build:store": "bash apps/mobile/scripts/build-store.sh",
+    "e2e": "playwright test --trace off"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "turbo": "^2.11.7",
     "typescript": "~6.0.3"
   }
