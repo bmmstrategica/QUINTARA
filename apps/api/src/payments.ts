@@ -40,6 +40,33 @@ export interface PaymentProvider {
   removeCard(token: string): Promise<void>;
 }
 
+/**
+ * Used in production until a real provider's adapter is configured. It takes no money and marks nothing as paid:
+ * every charge and card is refused with a plain message, so a booking, order or membership is never confirmed as
+ * paid when no payment was taken. Refunds cannot arise, as nothing was ever charged through it.
+ */
+export class UnavailablePaymentProvider implements PaymentProvider {
+  readonly name = 'unavailable';
+  static readonly REASON = 'Online payment is not available yet. Please contact Quintara to complete this payment.';
+  async charge(): Promise<ChargeResult> { return { status: 'failed', reason: UnavailablePaymentProvider.REASON }; }
+  async refund(): Promise<RefundResult> { return { status: 'failed', reason: UnavailablePaymentProvider.REASON }; }
+  async saveCard(): Promise<SaveCardResult> { return { status: 'failed', reason: UnavailablePaymentProvider.REASON }; }
+  async removeCard(): Promise<void> {}
+}
+
+/** Whether a provider actually moves money. Simulated and unavailable providers do not. */
+export const takesRealPayments = (provider: PaymentProvider) => provider.name !== 'mock' && provider.name !== 'unavailable';
+
+/**
+ * Chooses the payment provider for this process. Production never uses the simulated provider (which approves every
+ * charge), except on a staging deployment that says so explicitly (DEPLOY_ENV=staging). Until a real adapter is
+ * written and configured, production refuses payments rather than pretending to take them.
+ */
+export function choosePaymentProvider(env: { production: boolean; deployEnv?: string }): PaymentProvider {
+  if (!env.production || env.deployEnv === 'staging') return new MockPaymentProvider();
+  return new UnavailablePaymentProvider();
+}
+
 /** Stands in for a real provider in development and tests. Approves everything unless told to fail. */
 export class MockPaymentProvider implements PaymentProvider {
   readonly name = 'mock';

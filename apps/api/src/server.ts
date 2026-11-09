@@ -9,7 +9,7 @@ import { migrate } from './migrate.ts';
 import { deliverEmails, MockEmailProvider, ResendEmailProvider } from './email.ts';
 import type { EmailProvider } from './email.ts';
 import { deliverPartnerBookings } from './partner-bookings.ts';
-import { MockPaymentProvider } from './payments.ts';
+import { choosePaymentProvider, takesRealPayments } from './payments.ts';
 import { dispatchPush, ExpoPushProvider, MockPushProvider } from './push.ts';
 import type { PushProvider } from './push.ts';
 import { runRenewals } from './renewals.ts';
@@ -93,8 +93,10 @@ else {
   mock.send = async (messages) => { const out = await keep(messages); for (const m of messages) console.log(`\n[push not sent: development] To: ${m.to.slice(0, 24)}…\n${m.title}: ${m.body}\n`); return out; };
   push = mock;
 }
-// Replace with the real provider's adapter (see payments.ts) before taking money.
-const payments = new MockPaymentProvider();
+// Payments: simulated in development (and on a staging deployment, DEPLOY_ENV=staging). Production refuses payments
+// until a real provider's adapter is written and passed here (see payments.ts): it never marks anything paid without money.
+const payments = choosePaymentProvider({ production, deployEnv: env0('DEPLOY_ENV') });
+if (production && !takesRealPayments(payments)) console.warn(`Payments: ${payments.name}. No money can be taken until a payment provider is configured.`);
 
 const app = await buildApp(db, {
   webOrigins: (process.env.WEB_ORIGINS ?? 'http://localhost:3000,http://localhost:3001,http://localhost:3002').split(',').map((origin) => origin.trim()),
@@ -131,7 +133,7 @@ const housekeeping = setInterval(() => {
   void syncDueCalendars(db, calendarConfig).catch((error) => app.log.error(error));
   // Membership renewals: reminders, charges that are due, and lapses. Not run in production while payments are the
   // stand-in, which would mark renewals paid without taking any money.
-  if (!production || payments.name !== 'mock') void runRenewals(db, payments).then((r) => { if (r.renewed + r.failed + r.lapsed) app.log.info(r, 'renewals'); }).catch((error) => app.log.error(error));
+  if (!production || takesRealPayments(payments)) void runRenewals(db, payments).then((r) => { if (r.renewed + r.failed + r.lapsed) app.log.info(r, 'renewals'); }).catch((error) => app.log.error(error));
   // The weekly insights report, Monday from 07:00, to the staff who asked for it.
   void sendWeeklyReport(db, email, env0('ADMIN_URL') || (production ? 'https://admin.quintaralifestyle.com' : 'http://localhost:3001')).catch((error) => app.log.error(error));
 }, 60_000);
