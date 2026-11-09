@@ -117,3 +117,36 @@ test('the web app and the admin console fit a phone screen', async ({ browser })
   }
   await context.close();
 });
+
+test('a paid experience is paid through the checkout: out to the provider’s page and back, confirmed', async ({ page }) => {
+  page.on('dialog', (dialog) => void dialog.accept());
+  await webSignIn(page, 'daniel@example.com');
+  await page.goto(`${WEB}/experiences`);
+  await page.locator('article.item-row').filter({ hasText: 'The Aura Enclave' }).getByRole('link', { name: 'View details' }).click();
+  await page.getByRole('button', { name: /^(RSVP|Reserve)$/ }).click();
+  // Seats are held; paying sends the member to the provider's checkout (the test checkout in development).
+  await page.getByRole('button', { name: /^Pay R/ }).click();
+  await page.waitForURL(/\/v1\/payments\/test-checkout\//);
+  await expect(page.getByText('no card is taken')).toBeVisible();
+  await page.getByRole('link', { name: 'Pay', exact: true }).click();
+  // Back in the app, which shows it as paid only once the API says so.
+  await page.waitForURL(/localhost:3000\/payments\/return\?payment=/);
+  await expect(page.getByText('Your payment is confirmed')).toBeVisible();
+  await page.getByRole('link', { name: 'Your bookings' }).click();
+  const row = page.locator('article').filter({ hasText: 'The Aura Enclave' });
+  await expect(row.getByText(/confirmed/i).first()).toBeVisible();
+});
+
+test('a declined payment says so plainly and keeps the seats held', async ({ page }) => {
+  page.on('dialog', (dialog) => void dialog.accept());
+  await webSignIn(page, 'aisha@example.com');
+  await page.goto(`${WEB}/experiences`);
+  await page.locator('article.item-row').filter({ hasText: 'The Aura Enclave' }).getByRole('link', { name: 'View details' }).click();
+  await page.getByRole('button', { name: /^(RSVP|Reserve)$/ }).click();
+  await page.getByRole('button', { name: /^Pay R/ }).click();
+  await page.waitForURL(/\/v1\/payments\/test-checkout\//);
+  await page.getByRole('link', { name: 'Decline' }).click();
+  await expect(page.getByText('The payment did not go through.')).toBeVisible();
+  await page.goto(`${WEB}/bookings`);
+  await expect(page.getByRole('button', { name: /^Pay R/ })).toBeVisible();
+});

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Text, View } from 'react-native';
-import { useAction, usePermission, useResource } from '@quintara/app-core';
+import { payThrough, useAction, usePermission, useResource } from '@quintara/app-core';
+import { followPayment, paymentReturnUrl } from '../web-link';
 import { deliveryFee, formatMoney, ORDER_STAGE_LABEL, ORDER_STAGES, ORDER_STATUS_LABEL, orderInputSchema, orderStageIndex } from '@quintara/domain';
 import type { Order, OrderInput, Product } from '@quintara/domain';
 import { ActionError, Body, Button, Choice, confirmThen, Divider, Field, Heading, Muted, ResourceView, Row, Screen, Tag, Title } from '@/components/ui';
@@ -73,7 +74,7 @@ function Bag({ isMember, bag, clear, remove, onOrdered }: { isMember: boolean; b
   const [email, setEmail] = useState('');
   const [problem, setProblem] = useState<string | undefined>();
   const create = useAction((api, input: OrderInput) => api.createOrder(input));
-  const pay = useAction((api, id: string) => api.payOrder(id));
+  const pay = useAction((api, id: string) => payThrough(api, { purpose: 'boutique', id, returnUrl: paymentReturnUrl }, (a) => a.payOrder(id)));
   if (bag.length === 0) return null;
   const goods = bag.reduce((sum, l) => sum + l.product.priceMinor * l.quantity, 0), currency = bag[0]!.product.currency;
   const picked = chosen || (delivery.data?.length === 1 ? delivery.data[0]!.id : '');
@@ -88,7 +89,8 @@ function Bag({ isMember, bag, clear, remove, onOrdered }: { isMember: boolean; b
       const created = await create.run(input);
       if (!created) return;
       clear();
-      await pay.run(created.id);   // if this fails the order waits under Your orders
+      // If this fails the order waits under Your orders. With a hosted checkout, the member pays in the browser.
+      followPayment(await pay.run(created.id));
       onOrdered();
     });
   }
@@ -117,7 +119,7 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
   const reached = orderStageIndex(o.status), open = o.status !== 'cancelled';
   const at = (stage: (typeof ORDER_STAGES)[number]) => (stage === 'placed' ? o.createdAt : [...o.timeline].reverse().find((e) => e.kind === stage)?.at);
   const message = o.timeline.filter((e) => e.note && e.kind !== 'refunded').at(-1);
-  const pay = useAction((api) => api.payOrder(o.id));
+  const pay = useAction((api) => payThrough(api, { purpose: 'boutique', id: o.id, returnUrl: paymentReturnUrl }, (a) => a.payOrder(o.id)));
   const cancel = useAction((api) => api.cancelOrder(o.id));
   return (
     <View style={{ gap: space.sm }}>
@@ -148,7 +150,7 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
       {message ? <Muted>{message.note}</Muted> : null}
       {o.status === 'cancelled' && o.refundedMinor ? <Muted>Refunded {formatMoney(o.refundedMinor, o.currency)}.</Muted> : null}
       <ActionError error={pay.error ?? cancel.error} />
-      {o.status === 'awaiting_payment' ? <Button label={`Pay ${formatMoney(o.totalMinor, o.currency)}`} busy={pay.pending} onPress={() => confirmThen(`Pay ${formatMoney(o.totalMinor, o.currency)}?`, `Order ${o.orderNumber}`, 'Pay', async () => { if (await pay.run()) onChanged(); })} /> : null}
+      {o.status === 'awaiting_payment' ? <Button label={`Pay ${formatMoney(o.totalMinor, o.currency)}`} busy={pay.pending} onPress={() => confirmThen(`Pay ${formatMoney(o.totalMinor, o.currency)}?`, `Order ${o.orderNumber}`, 'Pay', async () => { if (followPayment(await pay.run())) onChanged(); })} /> : null}
       {o.status === 'awaiting_payment' || o.status === 'paid' ? <Button quiet label="Cancel order" busy={cancel.pending} onPress={() => confirmThen('Cancel this order?', o.status === 'paid' ? 'You will be refunded in full.' : 'Nothing has been charged.', 'Cancel order', async () => { if (await cancel.run()) onChanged(); }, true)} /> : null}
       <Divider />
     </View>

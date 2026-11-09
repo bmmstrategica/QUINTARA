@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { View } from 'react-native';
-import { useAction, useResource } from '@quintara/app-core';
+import { payThrough, useAction, useResource } from '@quintara/app-core';
+import { followPayment, paymentReturnUrl } from '../web-link';
 import { BOOKING_STATUS_LABEL, formatDateTime, formatMoney } from '@quintara/domain';
 import type { Booking } from '@quintara/domain';
 import { ActionError, Body, Button, clock, confirmThen, Divider, EmptyState, Heading, Muted, ResourceView, Screen, Tag } from '@/components/ui';
@@ -24,7 +25,7 @@ export default function BookingsScreen() {
 
 function BookingItem({ booking, onChanged }: { booking: Booking; onChanged: () => void }) {
   const { space } = useTheme();
-  const pay = useAction((api) => api.payBooking(booking.id));
+  const pay = useAction((api) => payThrough(api, { purpose: 'experience', id: booking.id, returnUrl: paymentReturnUrl }, (a) => a.payBooking(booking.id)));
   const cancel = useAction((api) => api.cancelBooking(booking.id));
   const when = formatDateTime(booking.startsAt, booking.timezone);
   const amount = formatMoney(booking.amountDueMinor, booking.currency);
@@ -40,7 +41,7 @@ function BookingItem({ booking, onChanged }: { booking: Booking; onChanged: () =
       {booking.status === 'awaiting_payment' ? (
         <>
           <Body>Your seats are held{booking.paymentDueAt ? ` until ${clock(booking.paymentDueAt)}` : ''}.</Body>
-          <Button label={`Pay ${amount}`} busy={pay.pending} onPress={() => confirmThen(`Pay ${amount}?`, booking.experienceTitle, 'Pay', async () => { if (await pay.run()) onChanged(); })} />
+          <Button label={`Pay ${amount}`} busy={pay.pending} onPress={() => confirmThen(`Pay ${amount}?`, booking.experienceTitle, 'Pay', async () => { if (followPayment(await pay.run())) onChanged(); })} />
         </>
       ) : null}
       {cancellable ? (

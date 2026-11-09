@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useAction, usePermission, useResource } from '@quintara/app-core';
+import { payThrough, useAction, usePermission, useResource } from '@quintara/app-core';
+import { follow, paymentReturnUrl } from '@/components/pay';
 import { deliveryFee, formatMoney, ORDER_STAGE_LABEL, ORDER_STAGES, ORDER_STATUS_LABEL, orderInputSchema, orderStageIndex } from '@quintara/domain';
 import type { Order, OrderInput, Product } from '@quintara/domain';
 import { ActionError, ResourceView } from '@/components/states';
@@ -105,7 +106,7 @@ function Bag({ bag, setBag, isMember, onOrdered }: { bag: BagLine[]; setBag: (up
   const [address, setAddress] = useState('');
   const [problem, setProblem] = useState('');
   const create = useAction((api, input: OrderInput) => api.createOrder(input));
-  const pay = useAction((api, id: string) => api.payOrder(id));
+  const pay = useAction((api, id: string) => payThrough(api, { purpose: 'boutique', id, returnUrl: paymentReturnUrl() }, (a) => a.payOrder(id)));
   const delivery = useResource((api) => api.listDeliveryOptions());
   const [chosen, setChosen] = useState('');
   const goods = bag.reduce((sum, l) => sum + l.product.priceMinor * l.quantity, 0);
@@ -127,7 +128,8 @@ function Bag({ bag, setBag, isMember, onOrdered }: { bag: BagLine[]; setBag: (up
     if (!created) return;
     setBag(() => []);
     // If the payment fails the order stays under Your orders, where it can be paid or cancelled.
-    await pay.run(created.id);
+    const outcome = await pay.run(created.id);
+    if (outcome?.kind === 'checkout') { follow(outcome); return; }
     onOrdered();
   }
 
@@ -172,7 +174,7 @@ function Bag({ bag, setBag, isMember, onOrdered }: { bag: BagLine[]; setBag: (up
 }
 
 function OrderItem({ order: o, onChanged }: { order: Order; onChanged: () => void }) {
-  const pay = useAction((api) => api.payOrder(o.id));
+  const pay = useAction((api) => payThrough(api, { purpose: 'boutique', id: o.id, returnUrl: paymentReturnUrl() }, (a) => a.payOrder(o.id)));
   const cancel = useAction((api) => api.cancelOrder(o.id));
   const reached = orderStageIndex(o.status), step = o.status === 'cancelled' ? -1 : reached;
   const at = (stage: (typeof ORDER_STAGES)[number]) => (stage === 'placed' ? o.createdAt : [...o.timeline].reverse().find((e) => e.kind === stage)?.at);
@@ -197,7 +199,7 @@ function OrderItem({ order: o, onChanged }: { order: Order; onChanged: () => voi
       </div>
       <div className="row">
         {step < 0 || o.status === 'awaiting_payment' ? <span className={`tag ${o.status === 'awaiting_payment' ? 'accent' : ''}`}>{ORDER_STATUS_LABEL[o.status]}</span> : null}
-        {o.status === 'awaiting_payment' ? <button className="btn small" disabled={pay.pending} onClick={async () => { if (window.confirm(`Pay ${formatMoney(o.totalMinor, o.currency)}?`) && (await pay.run())) onChanged(); }}>Pay</button> : null}
+        {o.status === 'awaiting_payment' ? <button className="btn small" disabled={pay.pending} onClick={async () => { if (window.confirm(`Pay ${formatMoney(o.totalMinor, o.currency)}?`) && follow(await pay.run())) onChanged(); }}>Pay</button> : null}
         {o.status === 'awaiting_payment' || o.status === 'paid' ? <button className="btn quiet small" disabled={cancel.pending} onClick={async () => { if (window.confirm(`Cancel order ${o.orderNumber}?`) && (await cancel.run())) onChanged(); }}>Cancel</button> : null}
       </div>
     </div>

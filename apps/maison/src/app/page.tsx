@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ApiError, useAction, usePermission, useResource, useSecondStep, useSession } from '@quintara/app-core';
+import { ApiError, payThrough, useAction, useApi, usePermission, useResource, useSecondStep, useSession } from '@quintara/app-core';
 import { deliveryFee, formatMoney, ORDER_STAGE_LABEL, ORDER_STAGES, orderInputSchema, orderStageIndex, photoSrcSet, photoUrl, sectionText } from '@quintara/domain';
 import type { Order, Product, TwoFactorSetup } from '@quintara/domain';
 
@@ -53,6 +53,29 @@ export default function MaisonPage() {
   const featured = list.find((p) => p.imagePath) ?? list[0] ?? null;
   const categories = useMemo(() => [...new Set(list.map((p) => p.category))].sort(), [list]);
   const shown = list.filter((p) => !category || p.category === category);
+
+  // Back from the payment provider's checkout (?payment=<id>): wait until the API has the outcome, then show the order
+  // as it now stands. Nothing is shown as paid until the API says it is.
+  const api = useApi();
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('payment');
+    if (!id) return;
+    window.history.replaceState(null, '', window.location.pathname);
+    let stopped = false, tries = 0;
+    const check = async () => {
+      try {
+        const status = await api.getCheckout(id);
+        if (stopped) return;
+        if (status.status === 'pending' && ++tries < 60) { setTimeout(check, 2000); return; }
+        const order = (await api.listOrders()).find((o) => o.id === status.targetId);
+        mine.reload();
+        setSheet(order ? { kind: 'done', order } : { kind: 'orders' });
+      } catch { if (!stopped) setSheet({ kind: 'orders' }); }
+    };
+    void check();
+    return () => { stopped = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api]);
 
   useEffect(() => {
     if (!sheet) return;
@@ -202,7 +225,8 @@ function BagSheet({ lines, isMember, onChange, onClose, onOrdered }: { lines: (L
   const [address, setAddress] = useState('');
   const [problem, setProblem] = useState('');
   const create = useAction((api, input: Parameters<typeof api.createOrder>[0]) => api.createOrder(input));
-  const pay = useAction((api, id: string) => api.payOrder(id));
+  // Paid at once while payments are simulated; otherwise the buyer goes to the provider's checkout and comes back here.
+  const pay = useAction((api, id: string) => payThrough(api, { purpose: 'boutique', id, returnUrl: `${window.location.origin}/` }, (a) => a.payOrder(id)));
   const goods = lines.reduce((n, l) => n + l.product.priceMinor * l.quantity, 0);
   const currency = lines[0]?.product.currency ?? 'ZAR';
   const options = delivery.data ?? [];
@@ -221,8 +245,9 @@ function BagSheet({ lines, isMember, onChange, onClose, onOrdered }: { lines: (L
     if (!window.confirm(`Place this order and pay ${formatMoney(total, currency)}?`)) return;
     const created = await create.run(input);
     if (!created) return;
-    const paid = await pay.run(created.id);
-    onOrdered(paid ?? created);
+    const outcome = await pay.run(created.id);
+    if (outcome?.kind === 'checkout') { keepBag([]); window.location.assign(outcome.url); return; }
+    onOrdered(outcome?.result ?? created);
   }
 
   return (

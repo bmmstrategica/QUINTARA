@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { Fragment, useEffect, useState } from 'react';
-import { useAction, useResource, useSession } from '@quintara/app-core';
+import { payThrough, useAction, useResource, useSession } from '@quintara/app-core';
+import { follow, paymentReturnUrl } from '@/components/pay';
 import { APPLICATION_PATH, APPLICATION_STATUS_LABEL, APPLICATION_STEPS, APPLICATION_WAITING_LIST_MESSAGE, BUILTIN_QUESTION_KEYS, builtinQuestion, checkAnswers, EMPTY_APPLICATION, applicationStepSchemas, formatHandle, formatMoney, RESIDENCIES, RESIDENCY_HELP, RESIDENCY_LABEL, SOCIAL_PLATFORM_LABEL, SOCIAL_PLATFORMS, termLabel } from '@quintara/domain';
 import type { Application, ApplicationData, ApplicationQuestions, ApplicationStepKey, BuiltinQuestionKey, CustomQuestion, MembershipPlan, Residency, SocialPlatform } from '@quintara/domain';
 import { ActionError, ResourceView } from '@/components/states';
@@ -272,7 +273,7 @@ function CustomQuestionField({ question: q, value, error, onChange }: { question
 
 function ApplicationStatusView({ application, onChanged }: { application: Application; onChanged: () => void }) {
   const { refresh } = useSession();
-  const pay = useAction((api) => api.payMembershipFee());
+  const pay = useAction((api) => payThrough(api, { purpose: 'membership', returnUrl: paymentReturnUrl() }, (a) => a.payMembershipFee()));
   const position = APPLICATION_PATH.indexOf(application.status);
   const messages: Partial<Record<Application['status'], string>> = {
     submitted: APPLICATION_WAITING_LIST_MESSAGE,
@@ -292,7 +293,7 @@ function ApplicationStatusView({ application, onChanged }: { application: Applic
         <ActionError error={pay.error} />
         <div className="row">
           {application.status === 'payment_pending' ? (
-            <button className="btn" disabled={pay.pending} onClick={async () => { if (await pay.run()) { await refresh(); onChanged(); } }}>{pay.pending ? 'Processing' : 'Proceed with payment'}</button>
+            <button className="btn" disabled={pay.pending} onClick={async () => { if (follow(await pay.run())) { await refresh(); onChanged(); } }}>{pay.pending ? 'Processing' : 'Proceed with payment'}</button>
           ) : null}
           {application.status === 'active' ? <Link className="btn" href="/">Enter the club</Link> : null}
           <Link className="btn quiet" href="/experiences">See experiences open to guests</Link>

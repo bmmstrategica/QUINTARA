@@ -9,7 +9,7 @@ import type { ReactNode } from 'react';
 import { ApiError, toApiError } from '@quintara/api-client';
 import type { QuintaraApi } from '@quintara/api-client';
 import { can } from '@quintara/domain';
-import type { GuestAccount, GuestAccountInput, Market, MembershipStatus, Permission, SecondStep, Session, TwoFactorSetup } from '@quintara/domain';
+import type { CheckoutPurpose, GuestAccount, GuestAccountInput, Market, MembershipStatus, Permission, SecondStep, Session, TwoFactorSetup } from '@quintara/domain';
 
 /* ---------- API and session ---------- */
 
@@ -277,3 +277,19 @@ export function useAction<Args extends unknown[], T>(perform: (api: QuintaraApi,
 }
 
 export { ApiError };
+
+/* ---------- Paying ---------- */
+
+/** What paying did: paid at once (simulated payments), or a checkout page to send the member to. */
+export type PayOutcome<T> = { kind: 'paid'; result: T } | { kind: 'checkout'; url: string };
+
+/**
+ * Pays for a booking, an order or the membership fee. When the API takes payments through the provider's hosted
+ * checkout, this opens one and returns its address (the member pays there and comes back to `returnUrl` with
+ * `?payment=<id>`); otherwise it charges at once with `direct`.
+ */
+export async function payThrough<T>(api: QuintaraApi, input: { purpose: CheckoutPurpose; id?: string; returnUrl: string }, direct: (api: QuintaraApi) => Promise<T>): Promise<PayOutcome<T>> {
+  const config = await api.getPaymentConfig();
+  if (config.checkout === 'hosted') return { kind: 'checkout', url: (await api.startCheckout(input)).url };
+  return { kind: 'paid', result: await direct(api) };
+}

@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
-import { useAction, usePermission, useResource, useSession } from '@quintara/app-core';
+import { payThrough, useAction, usePermission, useResource, useSession } from '@quintara/app-core';
+import { followPayment, paymentReturnUrl } from '../../web-link';
 import { ADMISSION_LABEL, BOOKING_STATUS_LABEL, bookingOffer, formatDateTime, formatMoney } from '@quintara/domain';
 import type { Booking, BookingOffer, Experience } from '@quintara/domain';
 import { ActionError, Body, Button, Divider, Heading, Muted, ResourceView, Screen, Tag, Title } from '@/components/ui';
@@ -34,7 +35,7 @@ function Detail({ experience, booking, onChanged }: { experience: Experience; bo
   const [seats, setSeats] = useState(1);
   const book = useAction((api, count: number) => api.bookExperience(experience.id, count));
   const cancel = useAction((api, bookingId: string) => api.cancelBooking(bookingId));
-  const pay = useAction((api, bookingId: string) => api.payBooking(bookingId));
+  const pay = useAction((api, bookingId: string) => payThrough(api, { purpose: 'experience', id: bookingId, returnUrl: paymentReturnUrl }, (a) => a.payBooking(bookingId)));
   const when = experience.startsAt ? formatDateTime(experience.startsAt, experience.timezone) : null;
   const seatsLeft = experience.capacity === null ? null : experience.capacity - (experience.seatsTaken ?? 0);
   const offer = bookingOffer(experience, session);
@@ -72,7 +73,7 @@ function Detail({ experience, booking, onChanged }: { experience: Experience; bo
             <>
               <Body>Your seats are held. Pay {formatMoney(booking.amountDueMinor, booking.currency)} to confirm them.</Body>
               <ActionError error={pay.error} />
-              <Button busy={pay.pending} label={`Pay ${formatMoney(booking.amountDueMinor, booking.currency)}`} onPress={async () => { if (await pay.run(booking.id)) onChanged(); }} />
+              <Button busy={pay.pending} label={`Pay ${formatMoney(booking.amountDueMinor, booking.currency)}`} onPress={async () => { if (followPayment(await pay.run(booking.id))) onChanged(); }} />
             </>
           ) : null}
           <ActionError error={cancel.error} />

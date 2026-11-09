@@ -116,8 +116,12 @@ if (env0('ANTHROPIC_API_KEY') && env0('QERA_MODEL') !== 'rules') {
   console.log(`QÉRA: ${qeraModel.name}, with the rule-based model as fallback.`);
 }
 
+// Sign-in attempts per address per minute (10). Development and test runs may raise it (SIGN_IN_LIMIT); production never.
+const signInLimit = !production && Number(env0('SIGN_IN_LIMIT')) > 0 ? Number(env0('SIGN_IN_LIMIT')) : undefined;
+
 const app = await buildApp(db, {
   qeraModel,
+  signInLimit,
   webOrigins: (process.env.WEB_ORIGINS ?? 'http://localhost:3000,http://localhost:3001,http://localhost:3002').split(',').map((origin) => origin.trim()),
   authMode,
   reviewAccount,
