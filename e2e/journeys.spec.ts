@@ -70,6 +70,30 @@ test.describe.serial('staff publish, members book, staff see it', () => {
     await admin.getByRole('row', { name: new RegExp(title) }).getByRole('link', { name: 'Open' }).click();
     await expect(admin.getByText(MEMBER_NAME).first()).toBeVisible();
   });
+
+  test('the member shows the ticket’s QR code; staff check the guest in once', async ({ browser }) => {
+    const member = await browser.newPage();
+    await webSignIn(member, MEMBER);
+    await member.goto(`${WEB}/bookings`);
+    const row = member.locator('article.item-row').filter({ hasText: title });
+    await row.getByRole('button', { name: 'Show ticket' }).click();
+    const qr = row.locator('img.qr');
+    await expect(qr).toBeVisible();
+    expect(await qr.getAttribute('src')).toMatch(/^data:image\/png;base64,/);
+    const code = (await row.locator('.facts strong').textContent())!.trim();
+    expect(code).toMatch(/^QT-[0-9A-F]+$/);
+    await expect(qr).toHaveAttribute('alt', new RegExp(code));
+
+    const desk = await browser.newPage();
+    await adminSignIn(desk, 'desk@example.com');
+    await desk.goto(`${ADMIN}/check-in`);
+    await desk.getByLabel('Ticket code').fill(code);
+    await desk.getByRole('button', { name: 'Check in' }).click();
+    await expect(desk.getByRole('status')).toHaveText(new RegExp(`Welcome. ${MEMBER_NAME}`));
+    await desk.getByLabel('Ticket code').fill(code);
+    await desk.getByRole('button', { name: 'Check in' }).click();
+    await expect(desk.locator('p.error[role=status]')).toBeVisible();      // a ticket is used once
+  });
 });
 
 test('a concierge request sent on the web reaches the desk in the admin console', async ({ browser }) => {

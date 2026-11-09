@@ -6,6 +6,7 @@ import { formatDateTime } from '@quintara/domain';
 import type { Booking } from '@quintara/domain';
 import { BookingStatusTag, DateBlock } from '@/components/experience';
 import { PayBooking, RefundNote } from '@/components/pay';
+import { Ticket } from '@/components/ticket';
 import { ActionError, EmptyState, ResourceView } from '@/components/states';
 import { useSection } from '@/components/section-copy';
 
@@ -36,7 +37,7 @@ function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () =>
       <div>
         <h3><Link href={`/experiences/${booking.experienceId}`} style={{ textDecoration: 'none' }}>{booking.experienceTitle}</Link></h3>
         <p>{when.long}, {when.time}. {booking.venueName}, {booking.area}. {booking.seats} seat{booking.seats > 1 ? 's' : ''}.</p>
-        {booking.status === 'confirmed' ? <div className="facts">Ticket code: <strong>{booking.ticketCode}</strong></div> : null}
+        {booking.status === 'confirmed' ? <Ticket code={booking.ticketCode} title={booking.experienceTitle} /> : null}
         <PayBooking booking={booking} onPaid={onChanged} />
         <RefundNote booking={booking} />
         <ActionError error={cancel.error} />

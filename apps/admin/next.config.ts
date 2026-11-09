@@ -27,7 +27,7 @@ const config: NextConfig = {
       { key: 'X-Frame-Options', value: 'DENY' },
       { key: 'Referrer-Policy', value: 'no-referrer' },
       { key: 'Content-Security-Policy', value: contentSecurityPolicy },
-      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()' },
+      { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(), payment=(), usb=()' },
       { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
       ...(production ? [{ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' }] : []),
       // Staff tools should never be indexed.
