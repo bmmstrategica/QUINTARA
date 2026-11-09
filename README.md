@@ -5,7 +5,8 @@ This is the Phase 1 foundation: a real API on PostgreSQL for the first slice of 
 and apps that run against either that API or an in-browser mock with the same rules.
 
 **Going live and publishing to the App Store and Google Play: see [docs/RELEASE.md](docs/RELEASE.md)**, which also
-lists the actions still pending.
+lists the actions still pending. Deploying the backend and the three web apps: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+The audit, test results and feature status of the November 2026 completion work: [docs/DELIVERY_REPORT.md](docs/DELIVERY_REPORT.md).
 
 ## Run it
 
@@ -20,6 +21,7 @@ pnpm dev:maison    # the Maison Quintara shop on http://localhost:3002
 pnpm dev:mobile    # Expo: press i (iOS simulator) or a (Android), or scan the QR code in Expo Go
 pnpm typecheck     # every package and app
 pnpm test          # mock tests, contract tests and security tests
+pnpm e2e           # browser journeys across the web app, admin console and API (Playwright)
 ```
 
 To connect the web app to the API, copy `.env.example` to `apps/web/.env.local`.
@@ -73,7 +75,8 @@ Still to come from the blueprint: `infra/`, and the identity, payment and email 
 - **Sign-in is a development stand-in.** `AUTH_MODE=dev` signs in any registered member or staff account by
   email alone and the server refuses to start with it in production. Replace `POST /v1/session` and
   `POST /admin/v1/session` with the identity provider. Attempts are limited per address per minute.
-  Sample accounts: `thandi@example.com` (member), `admin@example.com` and `desk@example.com` (staff).
+  Sample accounts: `thandi@example.com` (member); staff `admin@example.com` (Super Administrator),
+  `desk@example.com` (Concierge Manager) and `content@example.com` (Content Manager).
 - **Bookings are transactional.** The experience row is locked while seats are counted, and a partial
   unique index allows one live booking per member per experience.
 - **Audit.** Bookings, cancellations, connections and application submissions are written to an
@@ -211,7 +214,7 @@ yet been run on a simulator or a phone, and the membership application form exis
   `POST /v1/privileges/:id/redemptions`, `GET /v1/me/redemptions`. Redeeming issues a `QP-` code to show the
   partner. Each privilege has a per-member limit (0 for none) and an optional last day; the limit is checked
   under a lock, so two taps cannot both pass. Nothing about the member is sent to the partner.
-- **Staff** (`admin.content.manage`, held by admin and the concierge desk): create and edit partners and
+- **Staff** (`admin.providers.manage`: Super Administrator, Concierge Manager, Content Manager): create and edit partners and
   privileges, publish, unpublish, archive. A privilege is visible only when it and its partner are both
   published. Staff see how many codes were issued, never who redeemed.
 - Categories are free text set by staff. Web: `/lifestyle`. Admin: `/partners`. Not on mobile yet.
@@ -824,3 +827,20 @@ Passcode fallback, and "Sign out" on the lock screen.
 - Export as CSV. A weekly report by email every Monday from 07:00 to the staff who ask for it, once per week.
 - Routes: `GET /admin/v1/insights?period=&from=&to=`, `GET /admin/v1/insights/export`,
   `GET|PUT /admin/v1/insights/report`, `POST /admin/v1/insights/report/send`.
+
+## Completion work, November 2026 (migration 0033)
+
+- **Eight staff roles.** Super Administrator (`admin`), Executive Administrator (`executive_admin`), Membership
+  Manager, Experiences Manager, Concierge Manager (`concierge`), Finance Manager, Content Manager, Support
+  Administrator. Permissions in `STAFF_ROLE_PERMISSIONS` (`packages/domain`), checked by the API; the console shows
+  each role its own menu. New permissions: `admin.providers.manage` (partners, services), `admin.boutique.manage`
+  (Maison Quintara and orders), `admin.insights.view` (figures).
+- **The Overview** (`GET /admin/v1/dashboard`): revenue, members, bookings and orders over 30 days (from Insights),
+  and the work waiting (applications, renewals, seats, concierge and service requests, partner bookings, orders),
+  each section for the roles that may see it. Counts only.
+- **Payments in production** are refused until a real provider is configured; nothing is marked paid without money.
+- **QÉRA on Claude** (`apps/api/src/qera-claude.ts`) when `ANTHROPIC_API_KEY` is set on the API, behind the same
+  safeguards, with the rule-based model as fallback.
+- Booking an experience that has started is refused. Sample experience dates follow today (`sampleDate`).
+- `GET /ready` (database check), `apps/api/Dockerfile`, CI in `.github/workflows/ci.yml`, browser journeys in `e2e/`.
+- Admin console on phones: tables scroll in place instead of widening every page.

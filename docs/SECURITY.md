@@ -67,9 +67,12 @@ This covers members, guest accounts, applicants and staff. There are no password
   simply "not found".
 - **Admin console accounts.**
   - Up to five can be active (`STAFF_SEATS`).
-  - Roles: administrator (everything), or concierge desk (experiences, bookings, requests and content; not
-    members, money, cities or staff).
-  - Only administrators manage accounts.
+  - One role each, of eight: Super Administrator (everything), Executive Administrator, Membership Manager,
+    Experiences Manager, Concierge Manager, Finance Manager, Content Manager, Support Administrator. What each
+    may do is `STAFF_ROLE_PERMISSIONS` in `packages/domain`; the API checks it on every request and
+    `test/staff-accounts.test.ts` checks every role against real routes.
+  - Staff role keys never equal member role keys (both live in `user_roles`); a test enforces it.
+  - Only Super Administrators manage accounts.
   - Nobody can suspend or demote themselves, and the last administrator cannot be removed.
 
 ## The audit log
@@ -181,6 +184,16 @@ This covers members, guest accounts, applicants and staff. There are no password
 | 11 | The WhatsApp verification echoed any challenge text. | Low | Limited to safe characters. |
 | 12 | The audit log could not show who among the staff viewed what, and was not tamper-evident. | Medium | Staff activity log, hash chains, integrity check, export. |
 | 13 | Admin console accounts could only be created in the database. | Process | Staff accounts page: five seats, roles, suspension, two-factor reset. |
+
+## Review of 9 November 2026: findings and fixes
+
+| # | Finding | Severity | Fixed |
+|---|---|---|---|
+| 14 | Production used the simulated payment provider, which approves every charge: fees, paid seats and orders would be marked paid with no money taken. | Critical | Production refuses payments (`UnavailablePaymentProvider`) until a real adapter is configured; renewals never run on a stand-in. |
+| 15 | A new staff role key `executive` equalled the member business role `executive`: a business executive with any console account would have gained executive powers. Found before release, when migrating a real PostgreSQL. | High | Staff key `executive_admin`; the migration fails loudly on any key collision; a test forbids overlap. |
+| 16 | An experience that had already started could still be booked, and paid for. | Medium | Refused with 409 in the API and the offline mock. |
+| 17 | Liveness (`/health`) read the database through the session lookup, so a database blip could restart healthy API processes. | Low | Probes skip the session lookup; `/ready` checks the database separately. |
+| 18 | Insights (revenue) was readable by anyone who could manage members. | Low | Its own permission, `admin.insights.view`. |
 
 **Dependencies.** The remaining `pnpm audit` advisories are in Expo's and Metro's build tools (`node-forge`,
 `braces`, `uuid` in `@expo/cli` and Metro) and in `decode-uri-component`, which expo-router uses on the device.
