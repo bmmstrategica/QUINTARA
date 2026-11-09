@@ -9,7 +9,8 @@
     "migrate": "node --experimental-strip-types src/migrate-cli.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node --experimental-strip-types --test test/*.test.ts",
-    "first-run": "node --experimental-strip-types src/setup-cli.ts"
+    "first-run": "node --experimental-strip-types src/setup-cli.ts",
+    "load": "node --experimental-strip-types scripts/load.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
