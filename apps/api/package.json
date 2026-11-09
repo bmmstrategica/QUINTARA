@@ -12,6 +12,7 @@
     "first-run": "node --experimental-strip-types src/setup-cli.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
     "@electric-sql/pglite": "^0.5.8",
     "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^11.3.0",

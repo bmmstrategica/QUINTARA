@@ -10,6 +10,10 @@ import { deliverEmails, MockEmailProvider, ResendEmailProvider } from './email.t
 import type { EmailProvider } from './email.ts';
 import { deliverPartnerBookings } from './partner-bookings.ts';
 import { choosePaymentProvider, takesRealPayments } from './payments.ts';
+import { RuleBasedQeraModel } from '@quintara/domain';
+import type { QeraModel } from '@quintara/domain';
+import { ClaudeQeraModel, DEFAULT_QERA_MODEL, withFallback } from './qera-claude.ts';
+import { localNow } from './time.ts';
 import { dispatchPush, ExpoPushProvider, MockPushProvider } from './push.ts';
 import type { PushProvider } from './push.ts';
 import { runRenewals } from './renewals.ts';
@@ -98,7 +102,20 @@ else {
 const payments = choosePaymentProvider({ production, deployEnv: env0('DEPLOY_ENV') });
 if (production && !takesRealPayments(payments)) console.warn(`Payments: ${payments.name}. No money can be taken until a payment provider is configured.`);
 
+// QÉRA's language model. With ANTHROPIC_API_KEY set, Claude answers (QERA_MODEL chooses the model; QERA_MODEL=rules keeps
+// the built-in rule-based model). The rule-based model always stands behind it, so QÉRA answers even if the API cannot
+// be reached. The key never leaves the server.
+let qeraModel: QeraModel | undefined;
+if (env0('ANTHROPIC_API_KEY') && env0('QERA_MODEL') !== 'rules') {
+  const effort = (['low', 'medium', 'high'] as const).find((e) => e === env0('QERA_EFFORT'));
+  const zone = env0('SETUP_TIMEZONE') || 'Africa/Johannesburg';
+  qeraModel = withFallback(new ClaudeQeraModel({ model: env0('QERA_MODEL') || DEFAULT_QERA_MODEL, effort, today: () => localNow(zone).today }), new RuleBasedQeraModel(),
+    (error) => console.error('QÉRA model unavailable; answered with the rule-based model.', error instanceof Error ? error.message : error));
+  console.log(`QÉRA: ${qeraModel.name}, with the rule-based model as fallback.`);
+}
+
 const app = await buildApp(db, {
+  qeraModel,
   webOrigins: (process.env.WEB_ORIGINS ?? 'http://localhost:3000,http://localhost:3001,http://localhost:3002').split(',').map((origin) => origin.trim()),
   authMode,
   reviewAccount,
