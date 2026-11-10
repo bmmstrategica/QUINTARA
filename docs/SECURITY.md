@@ -71,6 +71,11 @@ This covers members, guest accounts, applicants and staff. There are no password
     Experiences Manager, Concierge Manager, Finance Manager, Content Manager, Support Administrator. What each
     may do is `STAFF_ROLE_PERMISSIONS` in `packages/domain`; the API checks it on every request and
     `test/staff-accounts.test.ts` checks every role against real routes.
+  - `e2e/admin-routes.spec.ts` signs in as each of the eight roles and follows the console's own links: no page a
+    role is offered may be refused by the API.
+  - Money moves only with `admin.finance.manage`: refunds from the payments ledger or with a cancellation, and
+    discounts on fees. Each refund carries a reason in the audit log, and a refund is recorded once, even when the
+    same refund is requested twice at once.
   - Staff role keys never equal member role keys (both live in `user_roles`); a test enforces it.
   - Only Super Administrators manage accounts.
   - Nobody can suspend or demote themselves, and the last administrator cannot be removed.

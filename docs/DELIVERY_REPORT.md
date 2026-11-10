@@ -204,7 +204,7 @@ Phase 2 (back-end services) closed four gaps found on a second audit against the
 - **Data retention (POPIA).** Hourly deletion of working records past their period (ended sessions, used codes,
   delivered emails and so on; table in SECURITY.md). The periods are defaults for legal review.
 
-Phase 3 (web app completion) so far:
+Phase 3 (web app completion), completed:
 
 - Every member and guest method of the API is called from a web screen. The only exception is push notification
   settings, which are phone-only by design.
@@ -213,10 +213,37 @@ Phase 3 (web app completion) so far:
   once as a member (34 pages, including experience, lifestyle, service and member pages behind ids). It fails on
   uncaught errors, console errors, server errors, error pages and links to missing pages. Both runs pass.
 
+- Browser journeys for the member flows not yet covered end to end, all passing:
+  - **The membership funnel:** a visitor makes a guest account and applies through every step; the application is
+    approved with a 50% discount; the applicant sees fee, discount and amount due, pays at the checkout and becomes
+    an active member.
+  - **Concierge both ways:** the desk replies with options, and the member confirms them on the request's own page.
+  - **QÉRA:** a weekend plan saved as a document (opened and deleted); seats booked only after the member says yes.
+- Visual baselines unchanged: the design is untouched.
+
+Phase 4 (admin console completion):
+
+- Every staff method of the API is used by a console screen. The exception is `uploadImage`, which `uploadPhoto`
+  (with cropping) replaced.
+- No placeholders or dead controls.
+- A new e2e test (`e2e/admin-routes.spec.ts`) signs in as each of the eight roles and follows the console's links.
+  It found:
+  - **Support could not open a single guest list.** The role is for guest lists and check-in, but the guest lists
+    sit on experience pages that needed the experiences permission. Guest-list staff may now read experiences;
+    editing, creating and cancelling still need the experiences permission, and those controls are hidden from
+    everyone else.
+- A second gap came from checking the console's own text against what it does:
+  - **The console promised refunds it had no way to make.** It told the desk that a Finance Manager could refund a
+    cancelled booking "afterwards from Payments", but the Payments page could not refund anything. Finance now
+    refund any received payment there, in full or in part, with an audited reason; the payer is told.
+  - While building it, I found two simultaneous identical refunds would have been counted twice in the ledger
+    (refunded once by the provider). Fixed, and tested on PostgreSQL.
+
 Evidence at this point:
-- API: 203 tests, 192 passing, 0 failing, 11 skipped; the skipped tests need PostgreSQL, Redis or S3 and run in CI.
+- API: 205 tests, 194 passing, 0 failing, 11 skipped; the skipped tests need PostgreSQL, Redis or S3 and run in CI.
 - The retention test also passed on PostgreSQL 16 as the restricted role.
-- e2e: 18 tests, all passing.
+- e2e: 29 tests, all passing. These include the eight role crawls, the two web crawls and the new journeys.
+- Visual regression: 8 of 8 passing.
 
 ## 5. Security assessment
 
@@ -291,6 +318,10 @@ Statuses: **Tested** = implemented and tested. **Credentials** = implemented, aw
 | | Payments ledger paging, totals; payments and members CSV export | Tested | Phase 2 |
 | | Data retention (POPIA) | Tested | Phase 2; periods for legal review |
 | | Every web page opens without errors (visitor, member) | Tested | Phase 3 crawl |
+| | Membership funnel in the browser: guest account to active member, with a discount | Tested | Phase 3 e2e |
+| | Every console page each role is offered opens, unrefused (eight roles) | Tested | Phase 4 crawl |
+| | Refunds from the payments ledger (finance) | Tested | Phase 4; real refunds wait on the provider, as payments |
+| | Support role: guest lists and check-in | Tested | Phase 4 fix |
 | | Production deployment | Blocked | needs approval, hosting accounts and DNS |
 
 ## 7. GitHub and approvals
