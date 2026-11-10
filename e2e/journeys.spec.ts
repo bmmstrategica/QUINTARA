@@ -96,7 +96,7 @@ test.describe.serial('staff publish, members book, staff see it', () => {
   });
 });
 
-test('a concierge request sent on the web reaches the desk in the admin console', async ({ browser }) => {
+test('a concierge request goes from the member to the desk and back: reply, options, the member confirms', async ({ browser }) => {
   const subject = `Helicopter transfer ${Date.now().toString(36)}`;
   const member = await browser.newPage();
   await webSignIn(member, MEMBER);
@@ -109,7 +109,20 @@ test('a concierge request sent on the web reaches the desk in the admin console'
   const desk = await browser.newPage();
   await adminSignIn(desk, 'desk@example.com');
   await desk.goto(`${ADMIN}/concierge`);
-  await expect(desk.getByText(subject).first()).toBeVisible();
+  await desk.getByRole('row', { name: new RegExp(subject) }).getByRole('link', { name: 'Open' }).click();
+  await desk.getByLabel('Reply to the member').fill('Two options: a Robinson R44 at 10:00, or an AS350 at 10:30. Both from the V&A heliport.');
+  await desk.getByRole('button', { name: 'Send' }).click();
+  await desk.getByRole('group', { name: 'Status' }).getByRole('button', { name: 'Options provided' }).click();
+  await expect(desk.getByRole('button', { name: 'Options provided' })).toHaveAttribute('aria-pressed', 'true');
+
+  // The member reads the reply on the request's own page and confirms.
+  await member.goto(`${WEB}/concierge`);
+  await member.locator('strong', { hasText: subject }).locator('xpath=../..').getByRole('link', { name: 'Open' }).click();
+  await expect(member.getByText('Robinson R44 at 10:00')).toBeVisible();
+  await member.getByRole('button', { name: /^Confirm/ }).click();
+  await expect(member.getByRole('button', { name: /^Confirm/ })).toHaveCount(0);
+  await desk.reload();
+  await expect(desk.getByRole('button', { name: 'Confirmed' })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('each staff role sees its own menu and the server refuses the rest', async ({ page }) => {
@@ -230,4 +243,104 @@ test('staff cancel a booking from the guest list; the member sees it cancelled, 
   await expect(member.getByText(/cancelled by Quintara\. The yacht is in for repairs\./).first()).toBeVisible();
   await member.goto(`${WEB}/bookings`);
   await expect(member.locator('article.item-row').filter({ hasText: 'The Executive Yacht Club' }).getByText('Cancelled by Quintara. The yacht is in for repairs.')).toBeVisible();
+});
+
+test('a visitor becomes a member: guest account, application, approval with a discount, payment at the checkout', async ({ browser }) => {
+  const stamp = Date.now().toString(36), name = `Lerato Applicant ${stamp}`;
+  const visitor = await browser.newPage();
+  visitor.on('dialog', (dialog) => void dialog.accept());
+  // A guest account first (development: no code is asked for).
+  await visitor.goto(`${WEB}/join`);
+  await visitor.getByLabel('Full name').fill(name);
+  await visitor.getByLabel('Email', { exact: true }).fill(`lerato.${stamp}@example.com`);
+  await visitor.getByRole('checkbox').check();
+  await visitor.getByRole('button', { name: /Create|Continue/ }).click();
+  await visitor.waitForURL(/\/qera/);
+
+  // The application, step by step. Name and email come from the guest account.
+  await visitor.goto(`${WEB}/apply`);
+  const form = visitor.locator('form');
+  const step = (title: string | RegExp) => expect(form.locator('h3')).toHaveText(title);
+  const next = (then: string | RegExp) => form.getByRole('button', { name: 'Continue' }).click().then(() => step(then));
+  const field = (name: RegExp) => form.getByRole('textbox', { name });
+  await step('Create your account');
+  await expect(form.locator('input[type=email]')).toHaveValue(`lerato.${stamp}@example.com`);
+  await next('About you');
+  await field(/^Phone number/).fill('+27 82 555 0199');
+  await field(/^Home city/).fill('Cape Town');
+  await next('Your work');
+  await field(/^Position/).fill('Director');
+  await field(/^Industry/).fill('Hospitality');
+  await next('Your interests');                             // interests are optional
+  await next('Why Quintara');
+  await form.locator('textarea').fill('I would like to host supper clubs for members and meet other founders.');
+  await next('Referral or invitation');                     // optional
+  await next('Where to find you');
+  await form.getByRole('radio', { name: 'Instagram' }).check();
+  await form.locator('input[placeholder="@yourname"]').fill(`lerato${stamp}`.slice(0, 20));
+  await next('Your membership');
+  await form.getByRole('radiogroup', { name: /memberships$/ }).locator('label').first().click();
+  // Questions staff have added would come next; the sample data has none, so this is the review.
+  await next('Review and send');
+  await form.getByRole('button', { name: 'Send application' }).click();
+  await expect(visitor.getByRole('heading', { name: 'Your application' })).toBeVisible();
+
+  // The committee approves, with a 50% discount granted by finance.
+  const admin = await browser.newPage();
+  admin.on('dialog', (dialog) => void dialog.accept());
+  await adminSignIn(admin, 'admin@example.com');
+  await admin.goto(`${ADMIN}/applications`);
+  const card = admin.locator('article.panel').filter({ hasText: name });
+  await card.getByLabel('Discount', { exact: true }).selectOption('percent');
+  await card.getByLabel('Discount percentage').fill('50');
+  await card.getByLabel('Reason for the discount').fill('Founding circle');
+  await card.getByRole('button', { name: 'Approve' }).click();
+  await expect(card.getByText('Payment pending', { exact: false })).toBeVisible();
+
+  // The applicant sees the fee, the discount and what is due, and pays at the checkout.
+  await visitor.goto(`${WEB}/apply`);
+  await expect(visitor.getByText(/Discount from the committee: .*\(Founding circle\)/)).toBeVisible();
+  await expect(visitor.getByText(/To pay:/)).toBeVisible();
+  await visitor.getByRole('button', { name: 'Proceed with payment' }).click();
+  await visitor.waitForURL(/\/v1\/payments\/test-checkout\//);
+  await visitor.getByRole('link', { name: 'Pay', exact: true }).click();
+  await visitor.waitForURL(/localhost:3000\/payments\/return\?payment=/);
+  await expect(visitor.getByText('Your payment is confirmed')).toBeVisible();
+  // A member now.
+  await visitor.goto(`${WEB}/apply`);
+  await expect(visitor.getByText('Your membership is active. Welcome to Quintara.')).toBeVisible();
+  await admin.reload();
+  await expect(admin.locator('article.panel').filter({ hasText: name }).locator('.chip')).toHaveText('Active');
+});
+
+test('QÉRA plans a weekend as a document, and books a seat once the member says yes', async ({ page }) => {
+  page.on('dialog', (dialog) => void dialog.accept());
+  await webSignIn(page, 'sipho@example.com');
+  await page.goto(`${WEB}/qera`);
+  const ask = async (text: string) => {
+    await page.getByLabel('Message QÉRA').fill(text);
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByLabel('Message QÉRA')).toHaveValue('');
+  };
+
+  // A plan becomes a document the member can open, print and delete.
+  await ask('Plan a weekend for me');
+  const documents = page.getByRole('region', { name: 'Documents' });
+  await documents.getByRole('link', { name: 'Open' }).first().click();
+  await page.waitForURL(/\/qera\/documents\//);
+  await expect(page.getByRole('button', { name: 'Print or save as PDF' })).toBeVisible();
+  await page.getByRole('button', { name: 'Delete' }).click();
+  await page.waitForURL(/\/qera$/);
+
+  // A booking is only made once the member agrees.
+  await ask('Please book two seats at The Executive Yacht Club');
+  const waiting = page.getByRole('group', { name: 'Waiting for your answer' });
+  await expect(waiting).toContainText('The Executive Yacht Club');
+  await page.goto(`${WEB}/bookings`);
+  await expect(page.locator('article.item-row').filter({ hasText: 'The Executive Yacht Club' })).toHaveCount(0);
+  await page.goto(`${WEB}/qera`);
+  await page.getByRole('group', { name: 'Waiting for your answer' }).getByRole('button', { name: 'Yes, go ahead' }).click();
+  await expect(page.getByRole('group', { name: 'Waiting for your answer' })).toHaveCount(0);
+  await page.goto(`${WEB}/bookings`);
+  await expect(page.locator('article.item-row').filter({ hasText: 'The Executive Yacht Club' })).toContainText('2 seats');
 });
