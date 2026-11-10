@@ -12,7 +12,7 @@
     "@quintara/api-client": "workspace:*",
     "@quintara/app-core": "workspace:*",
     "@quintara/domain": "workspace:*",
-    "next": "^16.3.8",
+    "next": "^16.4.6",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },

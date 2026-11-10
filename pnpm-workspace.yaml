@@ -9,7 +9,22 @@ overrides:
   react-native-worklets: 0.10.1
   react-native-gesture-handler: ~2.32.0
   "@react-native/metro-config": 0.86.3
+  # Security patches inside fastify's JSON serialiser (URI parsing advisories), within the same majors.
+  "fast-uri@>=3 <3.1.9": ^3.1.9
+  "fast-uri@>=4 <4.2.3": ^4.2.3
 
 # sharp (photographs) ships prebuilt binaries; its install script only checks they are present.
 allowBuilds:
   sharp: true
+
+minimumReleaseAgeExclude:
+  - "@next/env@16.4.6"
+  - "@next/swc-darwin-arm64@16.4.6"
+  - "@next/swc-darwin-x64@16.4.6"
+  - "@next/swc-linux-arm64-gnu@16.4.6"
+  - "@next/swc-linux-arm64-musl@16.4.6"
+  - "@next/swc-linux-x64-gnu@16.4.6"
+  - "@next/swc-linux-x64-musl@16.4.6"
+  - "@next/swc-win32-arm64-msvc@16.4.6"
+  - "@next/swc-win32-x64-msvc@16.4.6"
+  - next@16.4.6
