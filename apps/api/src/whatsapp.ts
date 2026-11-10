@@ -19,6 +19,8 @@ import { linkMessage, maskNumber, readCommand, toWhatsAppText, waDigits, waMeLin
 import type { QeraModel, QeraThread, WhatsAppLink } from '@quintara/domain';
 import { sealAddress } from './calendar.ts';
 import { audit, contextForUser } from './context.ts';
+import { MemoryRateLimiter } from './ratelimit.ts';
+import type { RateLimiter } from './ratelimit.ts';
 import type { RequestContext } from './context.ts';
 import type { Db, Queryable } from './db.ts';
 import { HttpError, unauthenticated, validation } from './errors.ts';
@@ -181,15 +183,10 @@ export function readDelivery(body: unknown): Inbound[] {
   return out;
 }
 
-export interface WhatsAppDeps { db: Db; config: WhatsAppConfig; model: QeraModel; payments: PaymentProvider; guestLimit?: number }
+export interface WhatsAppDeps { db: Db; config: WhatsAppConfig; model: QeraModel; payments: PaymentProvider; guestLimit?: number; limiter?: RateLimiter }
 
-const recent = new Map<string, { count: number; resetAt: number }>();
-setInterval(() => { const now = Date.now(); for (const [k, v] of recent) if (v.resetAt < now) recent.delete(k); }, 60_000).unref();
-function tooMany(number: string, perMinute: number): boolean {
-  const now = Date.now(), entry = recent.get(number);
-  if (!entry || entry.resetAt < now) { recent.set(number, { count: 1, resetAt: now + 60_000 }); return false; }
-  return ++entry.count > perMinute;
-}
+// Messages per number per minute. Counted with the API's rate limiter when given (shared by every API process).
+const ownLimiter = new MemoryRateLimiter();
 
 /** Handles one delivery. Errors are logged by the caller; WhatsApp is always answered 200 so it does not resend. */
 export async function handleDelivery(deps: WhatsAppDeps, body: unknown): Promise<void> {
@@ -204,8 +201,10 @@ export async function handleDelivery(deps: WhatsAppDeps, body: unknown): Promise
 async function handleMessage(deps: WhatsAppDeps, m: Inbound): Promise<void> {
   const { db, config } = deps;
   const reply = (message: OutgoingMessage, userId: string | null = null) => send(deps, m.from, message, userId);
-  if (tooMany(m.from, config.perMinute ?? 20)) {
-    if ((recent.get(m.from)?.count ?? 0) === (config.perMinute ?? 20) + 1) await reply({ type: 'text', text: WHATSAPP_TEXT.slowDown });
+  const perMinute = config.perMinute ?? 20, sent = await (deps.limiter ?? ownLimiter).hit('whatsapp', m.from);
+  if (sent > perMinute) {
+    // Told once, on the first message over the limit; after that, silence until the minute is over.
+    if (sent === perMinute + 1) await reply({ type: 'text', text: WHATSAPP_TEXT.slowDown });
     return;
   }
   const numberHash = hashOf(m.from, config.numberSecret);

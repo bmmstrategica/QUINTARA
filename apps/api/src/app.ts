@@ -34,6 +34,8 @@ import * as push from './push.ts';
 import * as renewals from './renewals.ts';
 import * as insights from './insights.ts';
 import { getDashboard } from './dashboard.ts';
+import { MemoryRateLimiter } from './ratelimit.ts';
+import type { RateLimiter } from './ratelimit.ts';
 import * as checkout from './checkout.ts';
 import { TestCheckoutProvider } from './payments.ts';
 import * as partners from './partners.ts';
@@ -78,6 +80,8 @@ export interface AppConfig {
   /** Where links in emails point: the address of the web app. */
   webUrl: string;
   /** Sign-in attempts allowed per address per minute. */
+  /** Where rate limits are counted: in this process by default; Redis (RedisRateLimiter) when several API processes run. */
+  rateLimiter?: RateLimiter;
   signInLimit?: number;
   /** The language model behind QÉRA. Defaults to the built-in rule-based stand-in. */
   qeraModel?: QeraModel;
@@ -233,20 +237,14 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   app.addHook('onResponse', async (request) => { if (request.method !== 'GET') void flushEmails(); });
   app.addHook('onClose', async () => { await delivering; });
 
-  // In-process rate limits. Each map forgets entries once their minute is over, so a flood of addresses cannot
-  // grow them without end. Behind several servers these move to Redis.
-  const limiters: Map<string, { count: number; resetAt: number }>[] = [];
-  const limiter = () => { const m = new Map<string, { count: number; resetAt: number }>(); limiters.push(m); return m; };
-  const sweep = setInterval(() => { const now = Date.now(); for (const m of limiters) for (const [k, v] of m) if (v.resetAt < now) m.delete(k); }, 60_000);
-  sweep.unref();
-  app.addHook('onClose', async () => clearInterval(sweep));
-  // A small in-process limiter for sign-in. Behind several servers this moves to Redis.
-  const attempts = limiter();
-  const limitSignIn = (request: FastifyRequest) => {
-    const now = Date.now(), entry = attempts.get(request.ip);
-    if (!entry || entry.resetAt < now) { attempts.set(request.ip, { count: 1, resetAt: now + 60_000 }); return; }
-    if (++entry.count > (config.signInLimit ?? 10)) throw new HttpError(429, 'Too many attempts. Please wait a minute and try again.');
+  // Rate limits (ratelimit.ts): counted in this process, or in Redis when the API runs as several processes.
+  const rateLimiter = config.rateLimiter ?? new MemoryRateLimiter();
+  app.addHook('onClose', async () => { if (!config.rateLimiter) await rateLimiter.close?.(); });
+  /** Throws 429 with `message` once `key` has used up `max` attempts this minute. */
+  const limit = async (bucket: string, key: string, max: number, message = 'Too many attempts. Please wait a minute and try again.') => {
+    if ((await rateLimiter.hit(bucket, key)) > max) throw new HttpError(429, message);
   };
+  const limitSignIn = (request: FastifyRequest) => limit('sign-in', request.ip, config.signInLimit ?? 10);
   const emailFrom = (request: FastifyRequest) => {
     const email = String((request.body as { email?: unknown } | null)?.email ?? '').trim();
     if (!/^\S+@\S+\.\S+$/.test(email)) throw new HttpError(422, 'Enter a valid email address.', { email: 'Enter a valid email address' });
@@ -268,7 +266,7 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   app.get('/v1/auth/config', async () => ({ method: config.authMode }));
   // The same answer whether or not the address has an account.
   app.post('/v1/auth/code', async (request, reply) => {
-    limitSignIn(request);
+    await limitSignIn(request);
     const email = auth.readEmail(request.body);
     const asked = (request.body as { purpose?: unknown } | null)?.purpose;
     const purpose: auth.CodePurpose = asked === 'join' || asked === 'staff' ? asked : 'sign_in';
@@ -278,7 +276,7 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   });
   // Members, guest accounts and applicants. Staff use the admin console's own sign-in.
   app.post('/v1/auth/verify', async (request, reply) => {
-    limitSignIn(request);
+    await limitSignIn(request);
     const email = auth.readEmail(request.body), code = auth.readCode(request.body);
     if (!(await auth.checkCode(db, config.reviewAccount, email, code, 'sign_in'))) throw new HttpError(401, auth.WRONG_CODE);
     const user = (await db.query<{ id: string }>(`SELECT id FROM users WHERE lower(email) = lower($1) AND status IN ('active', 'pending') AND deleted_at IS NULL`, [email]))[0];
@@ -295,7 +293,7 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
 
   app.post('/v1/session', async (request, reply) => {
     if (config.authMode !== 'dev') throw new HttpError(501, 'Sign in with the code sent to your email.');
-    limitSignIn(request);
+    await limitSignIn(request);
     const email = emailFrom(request);
     const users = await db.query<{ id: string; email: string }>(`SELECT id, email FROM users WHERE lower(email) = lower($1) AND status = 'active' AND deleted_at IS NULL`, [email]);
     const membership = users[0] ? await loadMembership(db, users[0].id, users[0].email) : null;
@@ -318,7 +316,7 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   /* ---------- Guest accounts ---------- */
   app.get('/v1/guest/account', async (request, reply) => reply.send(JSON.stringify(request.ctx.guest)).type('application/json'));
   app.post('/v1/guest/account', async (request, reply) => {
-    limitSignIn(request);
+    await limitSignIn(request);
     // In production the address is proved with a code before the account exists.
     if (config.authMode === 'code') {
       const email = auth.readEmail(request.body), code = auth.readCode(request.body);
@@ -330,7 +328,7 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   });
   app.post('/v1/guest/session', async (request, reply) => {
     if (config.authMode !== 'dev') throw new HttpError(501, 'Sign in with the code sent to your email.');
-    limitSignIn(request);
+    await limitSignIn(request);
     const userId = await guests.findGuestForSignIn(db, emailFrom(request));
     // The same answer for an unknown address as for one that is not a guest account.
     if (!userId) throw new HttpError(401, 'No account was found for that email address.');
@@ -360,32 +358,27 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   });
 
   /* ---------- Two-factor authentication: the same routes for the apps and, under /admin, for staff ---------- */
-  const mfaTries = limiter();
-  const limitMfa = (request: FastifyRequest) => {
-    const now = Date.now(), entry = mfaTries.get(request.ip);
-    if (!entry || entry.resetAt < now) { mfaTries.set(request.ip, { count: 1, resetAt: now + 60_000 }); return; }
-    if (++entry.count > 20) throw new HttpError(429, 'Too many attempts. Please wait a minute and try again.');
-  };
+  const limitMfa = (request: FastifyRequest) => limit('two-factor', request.ip, 20);
   for (const [prefix, kind] of [['/v1/auth/2fa', 'app'], ['/admin/v1/auth/2fa', 'staff']] as const) {
     app.get(prefix, (request) => twoFactor.status(db, mfa, request.ctx));
-    app.post(`${prefix}/setup`, (request) => { limitMfa(request); return twoFactor.beginSetup(db, mfa, request.ctx, request.body ?? {}); });
+    app.post(`${prefix}/setup`, async (request) => { await limitMfa(request); return twoFactor.beginSetup(db, mfa, request.ctx, request.body ?? {}); });
     app.post(`${prefix}/confirm`, async (request, reply) => {
-      limitMfa(request);
+      await limitMfa(request);
       const { recoveryCodes, newToken } = await twoFactor.confirmSetup(db, mfa, config.email, request.ctx, request.body);
       if (newToken) setSessionCookie(reply, newToken, kind);
       if (newToken && kind === 'staff') await staffAccounts.noteSignIn(db, (request.ctx.pending?.userId ?? request.ctx.userId)!);
       return { recoveryCodes };
     });
     app.post(`${prefix}/verify`, async (request, reply) => {
-      limitMfa(request);
+      await limitMfa(request);
       const token = await twoFactor.verify(db, mfa, config.email, request.ctx, request.body);
       setSessionCookie(reply, token, kind);
       const ctx = await loadContext(db, token, kind, secondStepRule);
       if (kind === 'staff' && ctx.userId) { await audit(db, ctx.userId, 'auth.staff_signed_in', 'user', ctx.userId, { state: 'verify' }); await staffAccounts.noteSignIn(db, ctx.userId); }
       return kind === 'staff' ? { userId: ctx.userId, roles: ctx.staffRoles } : { session: ctx.session, guest: ctx.guest };
     });
-    app.post(`${prefix}/recovery-codes`, async (request) => { limitMfa(request); return { recoveryCodes: await twoFactor.regenerateRecoveryCodes(db, mfa, request.ctx, request.body) }; });
-    app.post(`${prefix}/disable`, async (request, reply) => { limitMfa(request); await twoFactor.disable(db, mfa, config.email, request.ctx, request.body); return reply.status(204).send(); });
+    app.post(`${prefix}/recovery-codes`, async (request) => { await limitMfa(request); return { recoveryCodes: await twoFactor.regenerateRecoveryCodes(db, mfa, request.ctx, request.body) }; });
+    app.post(`${prefix}/disable`, async (request, reply) => { await limitMfa(request); await twoFactor.disable(db, mfa, config.email, request.ctx, request.body); return reply.status(204).send(); });
   }
 
   /* ---------- Experiences and bookings ---------- */
@@ -452,13 +445,8 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   app.get('/v1/home/slides', async (request) => lifestyle.listHomeSlides(db, request.ctx.marketId));
   app.get('/v1/lifestyle/services', async (request) => lifestyle.listServices(db, request.ctx.marketId, Boolean(request.ctx.session)));
   app.get<{ Params: { id: string } }>('/v1/lifestyle/services/:id', (request) => lifestyle.getService(db, request.ctx, request.params.id));
-  const guestRequests = limiter();
   app.post<{ Params: { id: string } }>('/v1/lifestyle/services/:id/requests', async (request) => {
-    if (!request.ctx.session) {
-      const now = Date.now(), entry = guestRequests.get(request.ip);
-      if (!entry || entry.resetAt < now) guestRequests.set(request.ip, { count: 1, resetAt: now + 60_000 });
-      else if (++entry.count > (config.guestRequestLimit ?? 5)) throw new HttpError(429, 'Too many requests from this connection. Please wait a minute and try again.');
-    }
+    if (!request.ctx.session) await limit('guest-requests', request.ip, config.guestRequestLimit ?? 5, 'Too many requests from this connection. Please wait a minute and try again.');
     return lifestyle.requestService(db, request.ctx, request.ctx.marketId, request.params.id, request.body);
   });
   app.get('/v1/me/service-requests', (request) => lifestyle.listMyServiceRequests(db, request.ctx));
@@ -466,13 +454,8 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   app.put<{ Params: { id: string } }>('/v1/boutique/products/:id/wishlist', (request, reply) => noContent(boutique.setWishlist(db, request.ctx, request.params.id, request.body), reply));
   app.get('/v1/boutique/orders', (request) => boutique.listOrders(db, request.ctx));
   // Guests can order without an account, so first orders are limited per address to keep the shop from being flooded.
-  const guestOrders = limiter();
   app.post('/v1/boutique/orders', async (request, reply) => {
-    if (!request.ctx.userId) {
-      const now = Date.now(), entry = guestOrders.get(request.ip);
-      if (!entry || entry.resetAt < now) guestOrders.set(request.ip, { count: 1, resetAt: now + 60_000 });
-      else if (++entry.count > (config.guestOrderLimit ?? 10)) throw new HttpError(429, 'Too many orders from this connection. Please wait a minute and try again.');
-    }
+    if (!request.ctx.userId) await limit('guest-orders', request.ip, config.guestOrderLimit ?? 10, 'Too many orders from this connection. Please wait a minute and try again.');
     const result = await boutique.createOrder(db, request.ctx, request.ctx.marketId, request.body);
     if (result.newSessionToken) setSessionCookie(reply, result.newSessionToken);
     return result.order;
@@ -482,7 +465,6 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
 
   /* ---------- QÉRA ---------- */
   const qeraModel = config.qeraModel ?? new RuleBasedQeraModel();
-  const qeraUse = limiter();
   app.get('/v1/qera', (request) => qera.getThread(db, request.ctx, config.guestQeraSeconds));
   app.get('/v1/qera/memory', (request) => chief.getMemory(db, request.ctx));
   app.post('/v1/qera/memory', (request) => chief.addMemory(db, request.ctx, request.body));
@@ -535,16 +517,14 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
       let body: unknown;
       try { body = JSON.parse(raw.toString('utf8')); } catch { throw new HttpError(400, 'That request could not be read.'); }
       // Answered at once, as WhatsApp asks; the messages are handled in order, one delivery after another.
-      const deps = { db, config: whatsappConfig, model: qeraModel, payments: config.payments, guestLimit: config.guestQeraSeconds };
+      const deps = { db, config: whatsappConfig, model: qeraModel, payments: config.payments, guestLimit: config.guestQeraSeconds, limiter: rateLimiter };
       whatsappWork = whatsappWork.then(() => whatsapp.handleDelivery(deps, body)).catch((error) => { app.log.error(error); });
       return reply.status(200).send({ received: true });
     });
   });
 
   app.post('/v1/qera/messages', async (request) => {
-    const who = request.ctx.userId ?? request.ip, now = Date.now(), entry = qeraUse.get(who);
-    if (!entry || entry.resetAt < now) qeraUse.set(who, { count: 1, resetAt: now + 60_000 });
-    else if (++entry.count > (config.qeraLimit ?? 20)) throw new HttpError(429, 'Give me a moment. Please try again in a minute.');
+    await limit('qera', request.ctx.userId ?? request.ip, config.qeraLimit ?? 20, 'Give me a moment. Please try again in a minute.');
     return qera.sendMessage(db, request.ctx, qeraModel, config.payments, request.ctx.marketId, request.body, config.guestQeraSeconds);
   });
   app.post<{ Params: { id: string } }>('/v1/qera/proposals/:id/confirm', async (request) => qera.decideProposal(db, request.ctx, config.payments, request.ctx.marketId, request.params.id, true));
@@ -556,10 +536,8 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   app.get('/v1/me/partner-bookings', (request) => partnerBookings.listMyPartnerBookings(db, request.ctx));
   app.post<{ Params: { id: string } }>('/v1/me/partner-bookings/:id/cancel', (request, reply) => noContent(partnerBookings.cancelMyPartnerBooking(db, request.ctx, request.params.id), reply));
   // The partner's side. The token in the address is the only credential, so wrong guesses are limited per address.
-  const tokenTries = limiter();
-  const limitTokens = (ip: string) => { const now = Date.now(), entry = tokenTries.get(ip); if (!entry || entry.resetAt < now) tokenTries.set(ip, { count: 1, resetAt: now + 60_000 }); else if (++entry.count > 30) throw new HttpError(429, 'Too many attempts. Please wait a minute and try again.'); };
-  app.get<{ Params: { token: string } }>('/v1/partner-bookings/:token', (request) => { limitTokens(request.ip); return partnerBookings.viewByToken(db, request.params.token); });
-  app.post<{ Params: { token: string } }>('/v1/partner-bookings/:token', (request) => { limitTokens(request.ip); return partnerBookings.respondByToken(db, request.params.token, request.body); });
+  app.get<{ Params: { token: string } }>('/v1/partner-bookings/:token', async (request) => { await limit('partner-links', request.ip, 30); return partnerBookings.viewByToken(db, request.params.token); });
+  app.post<{ Params: { token: string } }>('/v1/partner-bookings/:token', async (request) => { await limit('partner-links', request.ip, 30); return partnerBookings.respondByToken(db, request.params.token, request.body); });
 
   /* ---------- Quintara TV ---------- */
   app.get('/v1/tv/series', async (request) => tv.listSeries(db, request.ctx, await defaultMarket()));
@@ -665,7 +643,7 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   app.get('/admin/v1/session', async (request, reply) =>
     reply.send(JSON.stringify(request.ctx.staffRoles.length ? { userId: request.ctx.userId, roles: request.ctx.staffRoles } : null)).type('application/json'));
   app.post('/admin/v1/session', async (request, reply) => {
-    limitSignIn(request);
+    await limitSignIn(request);
     if (config.authMode === 'code') {
       const email = auth.readEmail(request.body), code = auth.readCode(request.body);
       if (!(await auth.checkCode(db, config.reviewAccount, email, code, 'staff'))) throw new HttpError(401, auth.WRONG_CODE);

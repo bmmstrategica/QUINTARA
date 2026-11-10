@@ -14,6 +14,9 @@ import { RuleBasedQeraModel } from '@quintara/domain';
 import type { QeraModel } from '@quintara/domain';
 import { ClaudeQeraModel, DEFAULT_QERA_MODEL, withFallback } from './qera-claude.ts';
 import { localNow } from './time.ts';
+import { createClient as createRedisClient } from 'redis';
+import { RedisRateLimiter } from './ratelimit.ts';
+import type { RateLimiter } from './ratelimit.ts';
 import { dispatchPush, ExpoPushProvider, MockPushProvider } from './push.ts';
 import type { PushProvider } from './push.ts';
 import { runRenewals } from './renewals.ts';
@@ -119,7 +122,23 @@ if (env0('ANTHROPIC_API_KEY') && env0('QERA_MODEL') !== 'rules') {
 // Sign-in attempts per address per minute (10). Development and test runs may raise it (SIGN_IN_LIMIT); production never.
 const signInLimit = !production && Number(env0('SIGN_IN_LIMIT')) > 0 ? Number(env0('SIGN_IN_LIMIT')) : undefined;
 
+// Rate limits are shared through Redis when REDIS_URL is set (needed once more than one API process runs); otherwise
+// they are counted in this process.
+let rateLimiter: RateLimiter | undefined;
+let redis: { quit(): Promise<unknown> } | undefined;
+if (env0('REDIS_URL')) {
+  const client = createRedisClient({ url: env0('REDIS_URL') });
+  client.on('error', (error: Error) => console.error(`Redis: ${error.message}`));
+  await client.connect();
+  redis = client;
+  rateLimiter = new RedisRateLimiter(client, (error) => console.error(`Rate limits: ${error instanceof Error ? error.message : error}`));
+  console.log('Rate limits: shared through Redis.');
+} else if (production) {
+  console.warn('Rate limits: counted in this process. Set REDIS_URL before running more than one API process.');
+}
+
 const app = await buildApp(db, {
+  rateLimiter,
   qeraModel,
   signInLimit,
   webOrigins: (process.env.WEB_ORIGINS ?? 'http://localhost:3000,http://localhost:3001,http://localhost:3002').split(',').map((origin) => origin.trim()),
@@ -170,3 +189,20 @@ const pushLoop = setInterval(() => {
   void dispatchPush(db, push).catch((error) => app.log.error(error)).finally(() => { pushing = false; });
 }, 4_000);
 pushLoop.unref();
+
+// Graceful shutdown (a deploy or a scale-down sends SIGTERM): stop taking requests, let those in flight finish, then
+// close the database and Redis. A second signal, or 25 seconds, ends the process regardless.
+let stopping = false;
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(signal, () => {
+    if (stopping) process.exit(1);
+    stopping = true;
+    app.log.info(`${signal}: finishing requests in flight, then stopping.`);
+    setTimeout(() => process.exit(1), 25_000).unref();
+    clearInterval(housekeeping); clearInterval(pushLoop);
+    void app.close()
+      .then(() => redis?.quit())
+      .then(() => db.close())
+      .then(() => process.exit(0), (error) => { app.log.error(error); process.exit(1); });
+  });
+}
