@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { PHASE_PRODUCTION_BUILD } from 'next/constants';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const production = process.env.NODE_ENV === 'production';
@@ -18,6 +19,14 @@ const contentSecurityPolicy = [
   ...(production ? ['upgrade-insecure-requests'] : []),
 ].join('; ');
 
+/**
+ * A production build needs the API's address (NEXT_PUBLIC_API_URL, fixed into the build). The console has no offline mode: without it, it would call localhost.
+ */
+function assertApiUrl(phase: string) {
+  if (phase !== PHASE_PRODUCTION_BUILD || process.env.NEXT_PUBLIC_API_URL) return;
+  throw new Error('Set NEXT_PUBLIC_API_URL to the Quintara API address (for example https://api.quintaralifestyle.com) before building.');
+}
+
 const config: NextConfig = {
   transpilePackages: ['@quintara/api-client', '@quintara/design-tokens', '@quintara/domain'],
   poweredByHeader: false,
@@ -36,4 +45,7 @@ const config: NextConfig = {
   },
 };
 
-export default config;
+export default (phase: string): NextConfig => {
+  assertApiUrl(phase);
+  return config;
+};

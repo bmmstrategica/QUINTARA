@@ -12,6 +12,8 @@ overrides:
   # Security patches inside fastify's JSON serialiser (URI parsing advisories), within the same majors.
   "fast-uri@>=3 <3.1.9": ^3.1.9
   "fast-uri@>=4 <4.2.3": ^4.2.3
+  # Expo's command-line tools (mobile builds only): twelve node-forge advisories, fixed in the same minor.
+  "node-forge@>=1 <1.4.1": ^1.4.1
 
 # sharp (photographs) ships prebuilt binaries; its install script only checks they are present.
 allowBuilds:

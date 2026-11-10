@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { PHASE_PRODUCTION_BUILD } from 'next/constants';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const production = process.env.NODE_ENV === 'production';
@@ -17,6 +18,15 @@ const contentSecurityPolicy = [
   "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'", "object-src 'none'",
   ...(production ? ['upgrade-insecure-requests'] : []),
 ].join('; ');
+
+/**
+ * A production build needs the API's address (NEXT_PUBLIC_API_URL, fixed into the build). Without it the app would be built on the offline demo data and look as if it worked; a demo build must say so
+ * with QUINTARA_DEMO_BUILD=1.
+ */
+function assertApiUrl(phase: string) {
+  if (phase !== PHASE_PRODUCTION_BUILD || process.env.NEXT_PUBLIC_API_URL || process.env.QUINTARA_DEMO_BUILD === '1') return;
+  throw new Error('Set NEXT_PUBLIC_API_URL to the Quintara API address (for example https://api.quintaralifestyle.com) before building. For a demonstration build on sample data, set QUINTARA_DEMO_BUILD=1 instead.');
+}
 
 const config: NextConfig = {
   // Workspace packages ship TypeScript source; Next compiles them.
@@ -40,4 +50,7 @@ const config: NextConfig = {
   },
 };
 
-export default config;
+export default (phase: string): NextConfig => {
+  assertApiUrl(phase);
+  return config;
+};

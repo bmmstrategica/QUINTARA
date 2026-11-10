@@ -110,6 +110,8 @@ Screens depend only on the `QuintaraApi` interface in `packages/api-client`.
   states are all real.
 - Set `NEXT_PUBLIC_API_URL` (web) or `EXPO_PUBLIC_API_URL` (mobile) to switch to `createHttpApi()`,
   the REST client for the API in `apps/api`. See `.env.example`.
+- A production `next build` refuses to run without `NEXT_PUBLIC_API_URL`, so a deployment can never fall back to
+  the mock by accident. `QUINTARA_DEMO_BUILD=1` builds a demonstration on the mock on purpose.
 
 ## Conventions
 

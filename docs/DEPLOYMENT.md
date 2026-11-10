@@ -63,6 +63,9 @@ in the repository. `.env.example` lists them all with notes.
 | `STAFF_SEATS` | optional | Admin console accounts that can be active (5). |
 
 Web apps: `NEXT_PUBLIC_API_URL` (all three), `NEXT_PUBLIC_MAISON_URL` (web, admin), `NEXT_PUBLIC_APP_URL` (shop).
+These are fixed into each build, so set them before `next build`. A production build without `NEXT_PUBLIC_API_URL`
+stops with an error; until this check was added, the web app and shop would silently have run on their offline
+demo data. A deliberate demonstration build on sample data sets `QUINTARA_DEMO_BUILD=1` instead.
 These are public by design: they are addresses, not secrets.
 
 ## First deployment
