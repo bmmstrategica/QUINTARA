@@ -229,5 +229,5 @@ test('staff cancel a booking from the guest list; the member sees it cancelled, 
   await member.goto(`${WEB}/notifications`);
   await expect(member.getByText(/cancelled by Quintara\. The yacht is in for repairs\./).first()).toBeVisible();
   await member.goto(`${WEB}/bookings`);
-  await expect(member.locator('article.item-row').filter({ hasText: 'The Executive Yacht Club' }).getByText(/cancelled/i).first()).toBeVisible();
+  await expect(member.locator('article.item-row').filter({ hasText: 'The Executive Yacht Club' }).getByText('Cancelled by Quintara. The yacht is in for repairs.')).toBeVisible();
 });

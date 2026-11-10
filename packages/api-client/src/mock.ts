@@ -497,7 +497,7 @@ export function createMockApi(options: MockApiOptions = {}): QuintaraApi {
       id: stored.id, experienceId: stored.experienceId, seats: stored.seats, status: stored.status, ticketCode: stored.ticketCode,
       experienceTitle: seed.title, startsAt: seed.startsAt, timezone: seed.timezone, venueName: seed.venueName, area: seed.area,
       currency: seed.currency, amountDueMinor: awaiting ? seed.memberPriceMinor * stored.seats : 0,
-      paymentDueAt: awaiting ? new Date(Date.now() + 30 * 60_000).toISOString() : null, refundedMinor: stored.refunded ?? 0,
+      paymentDueAt: awaiting ? new Date(Date.now() + 30 * 60_000).toISOString() : null, refundedMinor: stored.refunded ?? 0, cancelledByQuintaraReason: null,
     };
   }
 

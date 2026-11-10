@@ -306,6 +306,8 @@ export interface Booking {
   paymentDueAt: string | null;
   /** What has been returned to the member after a cancellation. */
   refundedMinor: number;
+  /** Why Quintara cancelled it, when Quintara did; null otherwise. */
+  cancelledByQuintaraReason: string | null;
 }
 
 /** What the booking button should offer for this experience and viewer. */

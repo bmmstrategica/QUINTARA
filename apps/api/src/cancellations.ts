@@ -53,7 +53,7 @@ export async function cancelBookingForStaff(db: Db, ctx: RequestContext, provide
     if (input.refund === 'partial' && payment && input.amountMinor! > Number(payment.amount_minor) - Number(payment.refunded_minor)) {
       throw validation([{ path: ['amountMinor'], message: 'That is more than was paid.', code: 'custom' } as never]);
     }
-    await tx.query(`UPDATE experience_bookings SET status = 'cancelled', payment_due_at = NULL, updated_at = now() WHERE id = $1`, [bookingId]);
+    await tx.query(`UPDATE experience_bookings SET status = 'cancelled', payment_due_at = NULL, cancelled_by_quintara_reason = $2, updated_at = now() WHERE id = $1`, [bookingId, input.reason]);
     await tx.query(`INSERT INTO notifications (user_id, category, title, link) VALUES ($1, 'booking_confirmation', $2, $3::jsonb)`,
       [row.user_id, `Your booking for ${row.title} has been cancelled by Quintara. ${input.reason}`, JSON.stringify({ type: 'booking', id: bookingId })]);
     await audit(tx, staffId, 'booking.cancelled_by_staff', 'experience_booking', bookingId, { reason: input.reason, refund: input.refund, amountMinor: input.amountMinor ?? null });
@@ -81,7 +81,7 @@ export async function cancelExperience(db: Db, ctx: RequestContext, provider: Pa
       `SELECT b.id, m.user_id FROM experience_bookings b JOIN members m ON m.id = b.member_id WHERE b.experience_id = $1 AND b.status = ANY($2::text[]) FOR UPDATE OF b`, [experienceId, LIVE]);
     await tx.query(`UPDATE experiences SET status = 'cancelled', updated_at = now() WHERE id = $1`, [experienceId]);
     for (const b of bookings) {
-      await tx.query(`UPDATE experience_bookings SET status = 'cancelled', payment_due_at = NULL, updated_at = now() WHERE id = $1`, [b.id]);
+      await tx.query(`UPDATE experience_bookings SET status = 'cancelled', payment_due_at = NULL, cancelled_by_quintara_reason = $2, updated_at = now() WHERE id = $1`, [b.id, why]);
       await tx.query(`INSERT INTO notifications (user_id, category, title, link) VALUES ($1, 'booking_confirmation', $2, $3::jsonb)`,
         [b.user_id, `${experience.title} has been cancelled. ${why} Anything you paid is refunded in full.`, JSON.stringify({ type: 'booking', id: b.id })]);
     }

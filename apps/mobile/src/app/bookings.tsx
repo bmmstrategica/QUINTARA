@@ -36,6 +36,7 @@ function BookingItem({ booking, onChanged }: { booking: Booking; onChanged: () =
       <Muted>{when.long}, {when.time}. {booking.venueName}, {booking.area}. {booking.seats} seat{booking.seats > 1 ? 's' : ''}.</Muted>
       <Tag tone={booking.status === 'confirmed' || booking.status === 'attended' ? 'positive' : booking.status === 'cancelled' || booking.status === 'declined' ? 'critical' : 'accent'} label={BOOKING_STATUS_LABEL[booking.status]} />
       {booking.status === 'confirmed' ? <Body>Ticket code: {booking.ticketCode}</Body> : null}
+      {booking.status === 'cancelled' && booking.cancelledByQuintaraReason ? <Muted>Cancelled by Quintara. {booking.cancelledByQuintaraReason}</Muted> : null}
       {booking.status === 'cancelled' && booking.refundedMinor ? <Muted>Refunded {formatMoney(booking.refundedMinor, booking.currency)}.</Muted> : null}
       <ActionError error={pay.error ?? cancel.error} />
       {booking.status === 'awaiting_payment' ? (

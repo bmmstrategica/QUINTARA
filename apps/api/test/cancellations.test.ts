@@ -24,7 +24,8 @@ test('staff cancel a paid booking with a full refund: seats freed, the member to
     const r = await admin('POST', `/admin/v1/bookings/${booking.id}/cancel`, { reason: 'The host has fallen ill.', refund: 'full' });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual([r.body.status, r.body.refundedMinor, r.body.refundFailed], ['cancelled', aura.memberPriceMinor, false]);
-    assert.equal((await api.listBookings()).find((b) => b.id === booking.id)!.status, 'cancelled');
+    const mine = (await api.listBookings()).find((b) => b.id === booking.id)!;
+    assert.deepEqual([mine.status, mine.cancelledByQuintaraReason, mine.refundedMinor], ['cancelled', 'The host has fallen ill.', aura.memberPriceMinor]);
     assert.equal((await api.getExperience(aura.id)).seatsTaken, before - 1);
     const p = await paymentOf(s, booking.id);
     assert.deepEqual([p.status, Number(p.refunded_minor)], ['refunded', aura.memberPriceMinor]);
@@ -88,7 +89,8 @@ test('cancelling an experience cancels every booking and refunds everyone in ful
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual([r.body.bookingsCancelled, r.body.refunds, r.body.refundsFailed, r.body.refundedMinor], [2, 2, 0, a.aura.memberPriceMinor * 3]);
     for (const { api, booking } of [a, b]) {
-      assert.equal((await api.listBookings()).find((x) => x.id === booking.id)!.status, 'cancelled');
+      const mine = (await api.listBookings()).find((x) => x.id === booking.id)!;
+      assert.deepEqual([mine.status, mine.cancelledByQuintaraReason], ['cancelled', 'Storm warning for the Atlantic Seaboard.']);
       assert.ok((await api.listNotifications()).some((n) => n.title.includes('has been cancelled. Storm warning')));
       assert.equal((await paymentOf(s, booking.id)).status, 'refunded');
     }

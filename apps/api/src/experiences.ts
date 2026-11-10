@@ -77,11 +77,12 @@ function toBooking(row: Row): Booking {
     amountDueMinor: row.status === 'awaiting_payment' ? Number(row.amount_due_minor) : 0,
     paymentDueAt: row.status === 'awaiting_payment' && row.payment_due_at ? new Date(row.payment_due_at as string).toISOString() : null,
     refundedMinor: Number(row.refunded_minor),
+    cancelledByQuintaraReason: row.status === 'cancelled' ? (row.cancelled_by_quintara_reason as string | null) ?? null : null,
   };
 }
 
 const SELECT_BOOKING = `
-  SELECT b.id, b.experience_id, b.seats, b.status, b.ticket_code, b.amount_due_minor, b.payment_due_at, e.title, e.starts_at, e.timezone, e.venue_name, e.area, e.currency_code,
+  SELECT b.id, b.experience_id, b.seats, b.status, b.ticket_code, b.cancelled_by_quintara_reason, b.amount_due_minor, b.payment_due_at, e.title, e.starts_at, e.timezone, e.venue_name, e.area, e.currency_code,
          COALESCE((SELECT SUM(p.refunded_minor) FROM payments p WHERE p.booking_id = b.id), 0) AS refunded_minor
     FROM experience_bookings b JOIN experiences e ON e.id = b.experience_id`;
 

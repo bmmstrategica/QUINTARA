@@ -38,6 +38,11 @@ export function PayBooking({ booking, onPaid }: { booking: Booking; onPaid: () =
 
 /** After a cancellation: says plainly whether money came back. */
 export function RefundNote({ booking }: { booking: Booking }) {
-  if (booking.status !== 'cancelled' || !booking.refundedMinor) return null;
-  return <div className="facts">Refunded {formatMoney(booking.refundedMinor, booking.currency)}.</div>;
+  if (booking.status !== 'cancelled' || (!booking.refundedMinor && !booking.cancelledByQuintaraReason)) return null;
+  return (
+    <div className="facts">
+      {booking.cancelledByQuintaraReason ? <span>Cancelled by Quintara. {booking.cancelledByQuintaraReason}</span> : null}
+      {booking.refundedMinor ? <span>Refunded {formatMoney(booking.refundedMinor, booking.currency)}.</span> : null}
+    </div>
+  );
 }
