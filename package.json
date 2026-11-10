@@ -16,6 +16,7 @@
     "visual": "playwright test --config playwright.visual.config.ts --trace off"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "1.63.0",
     "turbo": "^2.11.7",
     "typescript": "~6.0.3"

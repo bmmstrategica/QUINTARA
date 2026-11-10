@@ -145,7 +145,7 @@ export default function MaisonPage() {
               const soldOut = p.stock !== null && p.stock <= 0;
               const flag = soldOut ? 'Sold out' : p.membersOnly ? 'Kept for members' : p.stock !== null && p.stock <= 3 ? `${p.stock} left` : p.stock === null ? 'Made to order' : null;
               return (
-                <button key={p.id} className="piece" onClick={() => setSheet({ kind: 'piece', id: p.id })} aria-label={`${p.title} by ${p.maker}, ${formatMoney(p.priceMinor, p.currency)}`}>
+                <button key={p.id} className="piece" onClick={() => setSheet({ kind: 'piece', id: p.id })}>
                   <div className="arch"><Picture product={p} sizes="(max-width: 560px) 92vw, (max-width: 1100px) 46vw, 31vw" />{flag ? <span className="flag">{flag}</span> : null}</div>
                   <h3>{p.title}</h3>
                   <span className="meta"><span>{p.maker}</span><span className="price">{formatMoney(p.priceMinor, p.currency)}</span></span>

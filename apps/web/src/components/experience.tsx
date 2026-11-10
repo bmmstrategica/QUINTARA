@@ -4,7 +4,7 @@ import type { BookingStatus, Experience } from '@quintara/domain';
 
 /** The date as a block. Guests and visitors are not sent dates, so they see that it is shared with members. */
 export function DateBlock({ iso, timezone }: { iso: string | null; timezone: string }) {
-  if (!iso) return <div aria-label="Date shared with members"><div className="date-month">Date</div><div className="date-month" style={{ opacity: 0.7 }}>members</div></div>;
+  if (!iso) return <div aria-label="Date shared with members"><div className="date-month">Date</div><div className="date-month">members</div></div>;
   const { day, month } = formatDateTime(iso, timezone);
   return (
     <div>

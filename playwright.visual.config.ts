@@ -12,7 +12,8 @@ export default defineConfig({
   timeout: 90_000,
   workers: 1,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never', outputFolder: 'playwright-visual-report' }]] : 'list',
-  expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.01, animations: 'disabled', caret: 'hide', stylePath: './e2e/visual.css' } },
+  // Runs draw identical pixels, so the comparison is strict: a faint colour change in small text must fail.
+  expect: { toHaveScreenshot: { threshold: 0.05, maxDiffPixels: 150, animations: 'disabled', caret: 'hide', stylePath: './e2e/visual.css' } },
   use: { trace: 'off' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
