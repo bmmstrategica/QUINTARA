@@ -16,7 +16,8 @@ import { ClaudeQeraModel, DEFAULT_QERA_MODEL, withFallback } from './qera-claude
 import { localNow } from './time.ts';
 import { createClient as createRedisClient } from 'redis';
 import { RedisRateLimiter } from './ratelimit.ts';
-import { mediaObjectStore } from './objects-config.ts';
+import { auditObjectStore, mediaObjectStore } from './objects-config.ts';
+import { copyDueAuditDays } from './audit-export.ts';
 import { purgeDeletedMedia } from './media.ts';
 import type { RateLimiter } from './ratelimit.ts';
 import { dispatchPush, ExpoPushProvider, MockPushProvider } from './push.ts';
@@ -145,6 +146,11 @@ const objects = mediaObjectStore(env0) ?? undefined;
 if (objects) console.log('Photographs: in object storage.');
 else if (production) console.warn('Photographs: in the database. Set MEDIA_S3_BUCKET to keep them in object storage.');
 
+// Daily copies of the audit log in a write-once bucket (S3 Object Lock, compliance mode), kept AUDIT_RETENTION_DAYS.
+const auditCopies = auditObjectStore(env0);
+const auditRetentionDays = Math.max(1, Number(env0('AUDIT_RETENTION_DAYS')) || 2555);
+if (production && !auditCopies) console.warn('Audit log: no copies outside the database. Set AUDIT_S3_BUCKET (a bucket with Object Lock).');
+
 const app = await buildApp(db, {
   rateLimiter,
   objects,
@@ -187,6 +193,8 @@ const housekeeping = setInterval(() => {
   // Membership renewals: reminders, charges that are due, and lapses. Not run in production while payments are the
   // stand-in, which would mark renewals paid without taking any money.
   if (!production || takesRealPayments(payments)) void runRenewals(db, payments).then((r) => { if (r.renewed + r.failed + r.lapsed) app.log.info(r, 'renewals'); }).catch((error) => app.log.error(error));
+  // Yesterday's audit log, copied to write-once storage (AUDIT_S3_BUCKET, with Object Lock).
+  if (auditCopies) void copyDueAuditDays(db, auditCopies, { retentionDays: auditRetentionDays }).then((days) => { if (days.length) app.log.info(`Audit log copied for ${days.join(', ')}.`); }).catch((error) => app.log.error(error));
   // The weekly insights report, Monday from 07:00, to the staff who asked for it.
   void sendWeeklyReport(db, email, env0('ADMIN_URL') || (production ? 'https://admin.quintaralifestyle.com' : 'http://localhost:3001')).catch((error) => app.log.error(error));
 }, 60_000);

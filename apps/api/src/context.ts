@@ -200,7 +200,7 @@ export function requireMember(ctx: RequestContext, permission: Permission): Sess
 /** Where the current request came from, so every audit entry records it without each caller passing it on. */
 export const requestInfo = new AsyncLocalStorage<{ ip: string; userAgent: string }>();
 
-export async function audit(db: Queryable, actorUserId: string | null, action: string, entityType: string, entityId: string, changes: unknown = null): Promise<void> {
+export async function audit(db: Queryable, actorUserId: string | null, action: string, entityType: string, entityId: string | null, changes: unknown = null): Promise<void> {
   const from = requestInfo.getStore();
   await db.query('INSERT INTO audit_logs (actor_user_id, action, entity_type, entity_id, changes, ip, user_agent) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)',
     [actorUserId, action, entityType, entityId, JSON.stringify(changes), from?.ip ?? null, from?.userAgent ?? null]);
