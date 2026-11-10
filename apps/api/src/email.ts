@@ -5,7 +5,11 @@
  */
 import type { Db } from './db.ts';
 
-export interface EmailMessage { to: string; subject: string; text: string }
+export interface EmailMessage {
+  to: string; subject: string; text: string;
+  /** The same for every attempt at one message, so a retry after a lost answer is not delivered twice. */
+  idempotencyKey?: string;
+}
 export interface EmailProvider {
   readonly name: string;
   send(message: EmailMessage): Promise<void>;
@@ -30,11 +34,15 @@ export class ResendEmailProvider implements EmailProvider {
   readonly name = 'resend';
   private readonly apiKey: string;
   private readonly from: string;
-  constructor(options: { apiKey: string; from: string }) { this.apiKey = options.apiKey; this.from = options.from; }
+  private readonly baseUrl: string;
+  constructor(options: { apiKey: string; from: string; baseUrl?: string }) {
+    this.apiKey = options.apiKey; this.from = options.from; this.baseUrl = (options.baseUrl ?? 'https://api.resend.com').replace(/\/$/, '');
+  }
   async send(message: EmailMessage): Promise<void> {
-    const response = await fetch('https://api.resend.com/emails', {
+    const response = await fetch(`${this.baseUrl}/emails`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${this.apiKey}`, 'content-type': 'application/json' },
+      // Resend keeps an idempotency key for a day: a retry after a timed-out answer returns the first result.
+      headers: { authorization: `Bearer ${this.apiKey}`, 'content-type': 'application/json', ...(message.idempotencyKey ? { 'idempotency-key': message.idempotencyKey } : {}) },
       body: JSON.stringify({ from: this.from, to: [message.to], subject: message.subject, text: message.text }),
       signal: AbortSignal.timeout(10_000),
     });
@@ -67,7 +75,7 @@ export async function deliverEmails(db: Db, provider: EmailProvider, webUrl: str
     const path = row.link && PATHS[row.link.type] ? PATHS[row.link.type]!(row.link.id) : '/';
     const text = `${row.full_name ? `Dear ${row.full_name.split(' ')[0]},` : 'Hello,'}\n\n${row.subject}\n\nOpen Quintara: ${webUrl.replace(/\/$/, '')}${path}\n\nQuintara`;
     try {
-      await provider.send({ to: row.email, subject: row.subject, text });
+      await provider.send({ to: row.email, subject: row.subject, text, idempotencyKey: `email/${row.id}` });
       await db.query(`UPDATE email_outbox SET status = 'sent', sent_at = now(), last_error = NULL WHERE id = $1`, [row.id]);
       sent++;
     } catch (error) {

@@ -28,7 +28,7 @@ export interface PushMessage {
   badge?: number;
 }
 /** One answer per message, in order. `unregistered`: the app was removed or the token is no longer valid. */
-export type PushTicket = { status: 'ok' } | { status: 'error'; reason: string; unregistered: boolean };
+export type PushTicket = { status: 'ok' } | { status: 'error'; reason: string; unregistered: boolean; retry?: boolean };
 
 export interface PushProvider {
   readonly name: string;
@@ -63,13 +63,23 @@ export class ExpoPushProvider implements PushProvider {
     const out: PushTicket[] = [];
     for (let i = 0; i < messages.length; i += 100) {
       const batch = messages.slice(i, i + 100);
-      const response = await fetch(this.endpoint, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json', ...(this.accessToken ? { authorization: `Bearer ${this.accessToken}` } : {}) },
-        body: JSON.stringify(batch.map((m) => ({ ...m, sound: 'default', channelId: 'default', priority: 'high' }))),
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!response.ok) throw new Error(`The push service answered ${response.status}.`);
+      let response: Response;
+      try {
+        response = await fetch(this.endpoint, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json', ...(this.accessToken ? { authorization: `Bearer ${this.accessToken}` } : {}) },
+          body: JSON.stringify(batch.map((m) => ({ ...m, sound: 'default', channelId: 'default', priority: 'high' }))),
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!response.ok) throw new Error(`The push service answered ${response.status}.`);
+      } catch (error) {
+        // Nothing went out yet: the caller tries everything again later. Otherwise the batches already delivered
+        // must not be sent twice, so only this batch and those after it are marked to try again.
+        if (i === 0) throw error;
+        const reason = (error as Error).message;
+        for (let k = i; k < messages.length; k++) out.push({ status: 'error', reason, unregistered: false, retry: true });
+        return out;
+      }
       const tickets = ((await response.json()) as { data?: { status: string; message?: string; details?: { error?: string } }[] }).data ?? [];
       batch.forEach((_, k) => {
         const t = tickets[k];
@@ -194,14 +204,18 @@ export async function dispatchPush(db: Db, provider: PushProvider, limit = 200):
     await db.query(`UPDATE notifications SET push_state = 'pending' WHERE id = ANY($1::uuid[])`, [[...new Set(messages.map((m) => m.notificationId))]]);
     return 0;
   }
-  const delivered = new Set<string>(), gone: string[] = [];
+  const delivered = new Set<string>(), retry = new Set<string>(), gone: string[] = [];
   tickets.forEach((t, k) => {
     const m = messages[k]!;
     if (t.status === 'ok') delivered.add(m.notificationId);
     else if (t.unregistered) gone.push(m.deviceId);
+    else if (t.retry) retry.add(m.notificationId);
   });
+  // Not reached at all this time, on any phone: tried again on the next run. One that reached a phone is not resent.
+  const again = [...retry].filter((id) => !delivered.has(id));
+  if (again.length) await db.query(`UPDATE notifications SET push_state = 'pending' WHERE id = ANY($1::uuid[])`, [again]);
   if (gone.length) await db.query(`UPDATE push_devices SET disabled_at = now(), disabled_reason = 'The app is no longer registered on this phone' WHERE id = ANY($1::uuid[])`, [gone]);
-  const ids = [...new Set(messages.map((m) => m.notificationId))];
+  const ids = [...new Set(messages.map((m) => m.notificationId))].filter((id) => !again.includes(id));
   await db.query(`UPDATE notifications SET push_state = CASE WHEN id = ANY($2::uuid[]) THEN 'sent' ELSE 'failed' END WHERE id = ANY($1::uuid[])`, [ids, [...delivered]]);
   return delivered.size;
 }

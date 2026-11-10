@@ -54,15 +54,17 @@ export class CloudApiWhatsAppProvider implements WhatsAppProvider {
   private readonly token: string;
   private readonly phoneNumberId: string;
   private readonly version: string;
-  constructor(options: { token: string; phoneNumberId: string; version?: string }) {
+  private readonly baseUrl: string;
+  constructor(options: { token: string; phoneNumberId: string; version?: string; baseUrl?: string }) {
     this.token = options.token; this.phoneNumberId = options.phoneNumberId; this.version = options.version ?? 'v21.0';
+    this.baseUrl = (options.baseUrl ?? 'https://graph.facebook.com').replace(/\/$/, '');
   }
   async send(to: string, message: OutgoingMessage) {
     const payload = message.type === 'text'
       ? { messaging_product: 'whatsapp', to, type: 'text', text: { body: message.text, preview_url: false } }
       : { messaging_product: 'whatsapp', to, type: 'interactive', interactive: { type: 'button', body: { text: message.text.slice(0, 1024) },
           action: { buttons: message.buttons.slice(0, 3).map((b) => ({ type: 'reply', reply: { id: b.id, title: b.title.slice(0, 20) } })) } } };
-    const response = await fetch(`https://graph.facebook.com/${this.version}/${encodeURIComponent(this.phoneNumberId)}/messages`, {
+    const response = await fetch(`${this.baseUrl}/${this.version}/${encodeURIComponent(this.phoneNumberId)}/messages`, {
       method: 'POST', headers: { authorization: `Bearer ${this.token}`, 'content-type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) throw new Error(`WhatsApp refused the message (${response.status}).`);

@@ -88,7 +88,8 @@ export class ClaudeQeraModel implements QeraModel {
 
     const response = await this.client.beta.messages.create({
       model: this.model,
-      max_tokens: 4096,
+      // Thinking is always on for the default model and counts towards this; too low a ceiling cuts answers off.
+      max_tokens: 16_000,
       system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
       tools,
       tool_choice: tools.length ? { type: 'auto', disable_parallel_tool_use: true } : undefined,
