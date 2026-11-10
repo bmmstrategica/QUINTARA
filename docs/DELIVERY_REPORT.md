@@ -88,6 +88,14 @@ passed on the final code.
 | Membership lifecycle: apply, review, approve, pay, activate; declined card; repeated payment request | `staff.test.ts` (existing) |
 | Bookings, waitlists, applications, payment holds, refunds, duplicates | `contract.test.ts` (existing; runs against both the API and the offline mock) |
 | Sign-in by code, two-factor, staff accounts, audit chain, renewals, push, WhatsApp, order tracking, photographs, privacy, search | existing suites, all passing |
+| A visitor becomes a member: guest account, application, approval with a discount, checkout payment | e2e (browser: web app → admin console → web app) |
+| Concierge both ways: request, desk reply with options, member confirms | e2e (browser) |
+| QÉRA plans a document and books only once the member says yes | e2e (browser) |
+| Staff cancel a booking; the member sees the reason; finance refund from the ledger | e2e (browser) |
+| A guest buys in the Maison shop, pays at the checkout; staff process and dispatch it; the buyer follows it with tracking | e2e (browser: shop → admin console → shop) |
+| Every page reachable as visitor, member and each of the eight staff roles opens without an error or refusal | e2e crawls (`routes.spec.ts`, `admin-routes.spec.ts`) |
+| Email (Resend), WhatsApp Cloud API, Expo push, calendar hosts and the Claude Messages API: the real adapters' requests, and their failures | `adapters.test.ts`, against local stand-ins of each API |
+| The mobile app builds against the current API client and domain types | typecheck of all workspaces; iOS bundle export |
 | Migrations 0001–0033 and first-run, each twice, on **PostgreSQL 16**; API ready on it | run by hand here; also a CI job |
 
 ## 4. Quality assurance
@@ -239,10 +247,32 @@ Phase 4 (admin console completion):
   - While building it, I found two simultaneous identical refunds would have been counted twice in the ledger
     (refunded once by the provider). Fixed, and tested on PostgreSQL.
 
+Phase 5 (integration):
+
+- **Outside services on the wire.** The real adapters for Resend, the WhatsApp Cloud API, Expo push, calendar hosts
+  and the Claude Messages API had never run in a test; only their stand-ins had. `test/adapters.test.ts` now runs
+  each against a local server that answers as the provider's API does. It checks address, credentials, body, and
+  behaviour when the service fails. One test sends a signed WhatsApp delivery through the whole app and out through
+  the Cloud API adapter. What this cannot prove is that the real services accept the requests: DEPLOYMENT.md has a
+  one-time check for each in staging.
+- Fixed along the way:
+  - **Duplicate emails:** a retry after a lost answer from Resend could deliver a message twice. Each message now
+    carries an idempotency key.
+  - **Duplicate pushes:** when Expo refused a later batch of 100, the batches already delivered were pushed again.
+    Only the rest is now retried.
+  - **Cut-off QÉRA answers:** the default model always thinks, and thinking counts towards the 4,096-token ceiling,
+    so long answers could be cut off. Raised to 16,000.
+  - SDK 1.x sends the API key as a bearer token: noted, and checked by the test.
+- **The Maison shop's checkout return.** A buyer coming back from the checkout could see neither the order nor its
+  payment: the shop read the payment id inside an effect and cleared it from the address at once. Fixed, and the
+  whole shop journey (shop, console, buyer's tracking) is now an e2e test.
+- **Mobile.** Every workspace typechecks against the changed domain types (Phases 2 to 5), and the iOS bundle
+  builds. The app was not run on a device here.
+
 Evidence at this point:
-- API: 205 tests, 194 passing, 0 failing, 11 skipped; the skipped tests need PostgreSQL, Redis or S3 and run in CI.
+- API: 212 tests, 201 passing, 0 failing, 11 skipped; the skipped tests need PostgreSQL, Redis or S3 and run in CI.
 - The retention test also passed on PostgreSQL 16 as the restricted role.
-- e2e: 29 tests, all passing. These include the eight role crawls, the two web crawls and the new journeys.
+- e2e: 30 tests, all passing. These include the eight role crawls, the two web crawls and the new journeys.
 - Visual regression: 8 of 8 passing.
 
 ## 5. Security assessment
@@ -298,8 +328,8 @@ Statuses: **Tested** = implemented and tested. **Credentials** = implemented, aw
 | Networking | Directory, connections, messages, blocking, reports | Tested | existing |
 | | Live messages and unread indicators | Tested | web (e2e); mobile refreshes in the foreground (typecheck and iOS bundle only, not run on a device) |
 | QÉRA | Rule-based model, tools, proposals, memory, briefs | Tested | existing |
-| | Claude as hosted model | Credentials | `ANTHROPIC_API_KEY`; tested offline only |
-| | WhatsApp | Credentials | six `WHATSAPP_*` settings |
+| | Claude as hosted model | Credentials | `ANTHROPIC_API_KEY`; request and responses tested against a stand-in of the Messages API |
+| | WhatsApp | Credentials | six `WHATSAPP_*` settings; Cloud API adapter tested against a stand-in, end to end |
 | Admin | Overview from the database, by role | Tested | new |
 | | Insights and CSV export | Tested | existing |
 | | Eight roles, server-enforced | Tested | new |
@@ -315,6 +345,8 @@ Statuses: **Tested** = implemented and tested. **Credentials** = implemented, aw
 | | Write-once daily audit copies | Credentials | built and tested; needs a bucket with Object Lock; retention period for legal review |
 | | Staff cancellations with finance-approved refunds; whole-experience cancellation | Tested | Phase 2; e2e |
 | | Membership fee discounts | Tested | Phase 2 |
+| | Maison shop to console to buyer tracking | Tested | Phase 5 e2e |
+| | Email and push adapters: no duplicates on retry | Tested | Phase 5, against stand-ins; real services: Credentials |
 | | Payments ledger paging, totals; payments and members CSV export | Tested | Phase 2 |
 | | Data retention (POPIA) | Tested | Phase 2; periods for legal review |
 | | Every web page opens without errors (visitor, member) | Tested | Phase 3 crawl |

@@ -91,6 +91,21 @@ page). Once a provider is chosen and its adapter written: register `https://<api
 for payment events, set its keys in the host's secret store, and test end to end in staging with the provider's test
 cards before production.
 
+## Confirming the outside services in staging
+
+Each adapter is tested against a local stand-in that answers as the provider's API does (`test/adapters.test.ts`).
+A stand-in cannot prove the real service accepts the request, so with real keys in staging, check each once:
+
+| Service | Do this in staging | Expect |
+| --- | --- | --- |
+| Email (Resend) | Sign in by code with a real address. | The code arrives from `EMAIL_FROM`, not in spam. `email_outbox` shows it `sent`. |
+| Push (Expo) | Install a staging build, sign in, and tap "Send a test notification" in the app's notification settings. | The phone shows it. A removed app's device is switched off after the next push. |
+| WhatsApp (Cloud API) | Link a number from the app, then send "hello" to the business number. | QÉRA answers. Meta's webhook dashboard shows deliveries answered 200. |
+| QÉRA on Claude | Ask QÉRA "What is on this week?" | A reply naming real experiences. The API log shows no fallback to the rule-based model. |
+| Calendars | Connect a Google or Outlook private address. | Today's events appear in the daily brief within half an hour. |
+| Payments | After the provider is chosen: pay, decline and refund with its test cards. | As the e2e checkout journeys, with the provider's own pages. |
+| Photographs and audit copies (S3) | Upload a photograph; wait a day. | It is served; `audit:check-copies` reports the day's copy. |
+
 ## Each release
 
 1. CI must be green on the branch: types, all tests, production builds, migrations on PostgreSQL 16, the API image and
