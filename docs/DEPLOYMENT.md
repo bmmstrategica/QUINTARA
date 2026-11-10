@@ -49,6 +49,8 @@ in the repository. `.env.example` lists them all with notes.
 | `WEB_URL`, `ADMIN_URL` | yes | Where email links point. |
 | `TRUST_PROXY=true` | behind a load balancer | So rate limits see real addresses. |
 | `REDIS_URL` | more than one API process | Shares rate limits across processes. |
+| `MEDIA_S3_BUCKET` (+ `_REGION`, `_ENDPOINT`, keys) | recommended | Photographs in object storage instead of the database. |
+| `AUDIT_S3_BUCKET` (+ the same), `AUDIT_RETENTION_DAYS` | recommended | Daily write-once copies of the audit log. |
 | `DEPLOY_ENV` | | `staging` lets a staging deployment use the test checkout. |
 | `API_URL` | staging | The API's own public address, for the test checkout's links. |
 | `PAYMENTS` | optional | Development and staging: `simulated` charges at once instead of the test checkout. |
@@ -68,11 +70,17 @@ These are public by design: they are addresses, not secrets.
    `DATABASE_URL=… pnpm --filter @quintara/api migrate`. Re-running applies nothing new.
 2. First-run setup (opens the first city with the standard plans and creates the first Super Administrator):
    `DATABASE_URL=… SETUP_ADMIN_EMAIL=… SETUP_ADMIN_NAME=… pnpm --filter @quintara/api run first-run`. Safe to repeat.
-3. Build and start the API: `docker build -f apps/api/Dockerfile -t quintara-api .` then run it with the settings above.
+3. Create the API's restricted database role, as the owner:
+   `DATABASE_URL=<owner> APP_ROLE=quintara_app APP_ROLE_PASSWORD=<24+ random characters> pnpm --filter @quintara/api run app-role`.
+   The API's `DATABASE_URL` uses this role; the owner's connection is kept for migrations only.
+4. Create two buckets (Amazon S3, Cloudflare R2 or similar), both private: one for photographs (`MEDIA_S3_*`), and one
+   **created with Object Lock** for the audit log copies (`AUDIT_S3_*`). Give the API keys limited to those buckets.
+   Upload a photograph in staging and check it is served, before going live.
+5. Build and start the API: `docker build -f apps/api/Dockerfile -t quintara-api .` then run it with the settings above.
    Point the host's health check at `/ready`.
-4. Check `GET /ready` returns `{"ok":true,"database":"ok"}` and `GET /v1/auth/config` returns `{"method":"code"}`.
-5. Deploy the three web apps with their `NEXT_PUBLIC_*` settings; point DNS; confirm HTTPS.
-6. Sign in to the admin console as the first administrator, set up two-factor, add the other staff with their roles,
+6. Check `GET /ready` returns `{"ok":true,"database":"ok"}` and `GET /v1/auth/config` returns `{"method":"code"}`.
+7. Deploy the three web apps with their `NEXT_PUBLIC_*` settings; point DNS; confirm HTTPS.
+8. Sign in to the admin console as the first administrator, set up two-factor, add the other staff with their roles,
    and add the real content (experiences, partners, services, Maison Quintara, TV, photographs, descriptions).
 
 ## Payments
@@ -100,7 +108,10 @@ was written since); do this only with approval.
 
 - Managed PostgreSQL with daily backups kept at least 30 days and point-in-time recovery. Test a restore into a
   scratch database once a quarter, and before launch.
-- Copy the audit log to write-once storage daily (docs/SECURITY.md, "Before launch").
+- The audit log is copied daily to the write-once bucket (`AUDIT_S3_BUCKET`); check the copies with
+  `pnpm --filter @quintara/api run audit:check-copies`.
+- Photographs live in their bucket (`MEDIA_S3_BUCKET`): turn on its versioning or replication, since database backups
+  no longer contain them. Photographs stored in the database earlier move with `media:to-objects`.
 - `MFA_ENCRYPTION_KEY`, `CALENDAR_SECRET` and `WHATSAPP_NUMBER_SECRET` must be backed up with the database: a backup
   without them cannot decrypt those columns.
 

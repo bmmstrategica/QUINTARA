@@ -92,13 +92,13 @@ passed on the final code.
 
 ## 4. Quality assurance
 
-**Executed on the final code of stage 4 (10 November 2026):**
+**Executed on the final code of stage 5 (10 November 2026):**
 
 | Suite | Result |
 |---|---|
 | Type-check, 9 packages | passed |
-| API tests (unit, integration, security, contract), in-memory with Redis | **179 passed, 0 failed**, 5 PostgreSQL-only races skipped (153 before this work) |
-| API tests on **PostgreSQL 16** (fresh database each, 10 connections; stage 3) | **179 passed, 0 failed** |
+| API tests (unit, integration, security, contract), in memory, with an S3 protocol server | **184 passed, 0 failed**; 8 skipped that need PostgreSQL or Redis (153 tests before this work) |
+| The same suite on **PostgreSQL 16, connected as the restricted production role** | **190 passed, 0 failed** (Redis tests skipped in that run; they pass with Redis) |
 | Load test on PostgreSQL 16 (50 members at once, 20 s) | 568 requests/s, p95 158 ms, 0 errors (150 at once: 530/s, p95 495 ms, 0 errors) |
 | Visual regression (40 screens, both themes, desktop and phone) | passed; deterministic across repeated runs |
 | Offline-mock client tests | 8 passed |
@@ -174,6 +174,19 @@ provider-specific step.
 - **Security updates**: Next.js 16.4.6 closes two critical unauthenticated remote code execution advisories in the
   version the apps used; zod, fastify and fast-uri patched too.
 
+## 4e. Stage 5: object storage, a restricted database role, write-once audit copies
+
+- **Photographs in object storage** (`MEDIA_S3_*`): bytes in a private S3-compatible bucket, details in PostgreSQL,
+  served at the same addresses. Images stored earlier keep working and move with `media:to-objects`. A trigger queues
+  every deleted photograph so its files leave the bucket too; without it, erased members' pictures would have stayed.
+- **A restricted database role** for the API (`app-role`): data only, owning nothing, so the audit log's triggers
+  cannot be lifted through it. CI runs every API test as this role, which proves it has everything the API needs.
+- **Daily write-once copies of the audit log** (`AUDIT_S3_*`, S3 Object Lock in compliance mode), recorded in
+  `audit_exports` and checkable with `audit:check-copies`.
+- Tested against an S3 protocol server (moto) as well as in memory: Docker Hub was rate-limiting and the MinIO
+  image's registry was not reachable from this environment. moto is an emulator, so check the first real bucket in
+  staging. The retention period (2,555 days by default) is for legal confirmation.
+
 ## 5. Security assessment
 
 Already strong before this work (docs/SECURITY.md): two-factor for every account, hashed tokens, separate staff
@@ -186,7 +199,7 @@ Insights permission), and in stage 2 the checkout's protections (signed webhooks
 addresses limited to Quintara's apps, exactly-once settlement, refunds of late money). The Anthropic key stays on the server, and QÉRA can only propose actions, never take them.
 
 **Outstanding risks before launch:** a real payment provider's adapter for the hosted checkout (no card data at Quintara); an
-independent penetration test; a non-superuser database role; daily write-once audit export; `REDIS_URL` set once more
+independent penetration test; setting up the restricted role and the two buckets (built and tested); `REDIS_URL` set once more
 than one API process runs; the Expo SDK advisories (build tooling, and expo-router on the phone).
 
 **For professional review:** POPIA registration of the Information Officer and a privacy policy naming the processors
@@ -239,6 +252,9 @@ Statuses: **Tested** = implemented and tested. **Credentials** = implemented, aw
 | | Visual regression | Tested | web app; admin and shop not covered (section 4) |
 | | Accessibility (WCAG 2.1 AA, automated) | Tested | web, admin, shop; a manual screen-reader review is still advised |
 | | Shared rate limits, graceful shutdown | Tested | Redis needed in production once more than one API process runs |
+| | Photographs in object storage | Credentials | built and tested (in memory and an S3 protocol server); needs a bucket |
+| | Restricted database role | Tested | every API test runs as it in CI |
+| | Write-once daily audit copies | Credentials | built and tested; needs a bucket with Object Lock; retention period for legal review |
 | | Production deployment | Blocked | needs approval, hosting accounts and DNS |
 
 ## 7. GitHub and approvals

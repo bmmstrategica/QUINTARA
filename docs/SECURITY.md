@@ -197,6 +197,9 @@ This covers members, guest accounts, applicants and staff. There are no password
 | 19 | Next.js 16.3.8 (web, admin, shop) had two critical unauthenticated remote code execution advisories and a denial of service; zod had a high-severity memory exhaustion; fastify and fast-uri had low and moderate ones. | Critical | Next.js 16.4.6, zod 4.6.7, fastify 5.12.8, fast-uri patched (10 November 2026). |
 | 20 | Rate limits were counted per process, so running several API processes would multiply every limit. | Medium | Shared through Redis (`REDIS_URL`), with hashed keys and an in-process fallback. |
 | 21 | A deploy or scale-down could cut requests off mid-way (no shutdown handling). | Low | SIGTERM drains requests in flight, then closes Redis and the database. |
+| 22 | The API could only connect with full rights over its tables; anyone with its connection string could lift the audit log's protection. | Medium | A restricted role: data only, no ownership, the audit log append-only by permission. |
+| 23 | The audit log existed only inside the database: a full compromise could rewrite it and its hash chain together. | Medium | Daily write-once copies (S3 Object Lock, compliance mode), checkable against the database. |
+| 24 | Deleted photographs would stay in object storage once moved there, including pictures from erased accounts. | Medium | A trigger queues every deleted photograph; housekeeping removes its files from the bucket. |
 
 **Paying through a hosted checkout (stage 2).** Card details are typed only on the provider's page. The provider's
 webhook (`POST /v1/payments/webhook`) is read as raw bytes and refused unless its signature checks; it is exempt from
@@ -221,10 +224,13 @@ no address, email or number is stored there. If Redis is unreachable the API cou
    secrets, and back it up: losing it means everyone sets up their authenticator again.
 2. Set `REVIEW_2FA_CODE` if the review account is used.
 3. Set `TRUST_PROXY` to match the hosting, and `WEB_ORIGINS` to exactly the three production addresses.
-4. Restrict the database user the API uses: no superuser rights. The audit log's protection against changes is
-   enforced by triggers, which a superuser could disable.
-5. Copy the audit log to separate, write-once storage on a schedule (for example a daily export to an object
-   storage bucket with object lock), so a copy survives even a full database compromise.
+4. Connect the API as the restricted role (`pnpm --filter @quintara/api run app-role`, run once by the owner), never as
+   the owner or a superuser: through it the audit log's triggers cannot be disabled and the log cannot be changed,
+   emptied or truncated. Keep the owner's connection for migrations only. (Built and tested; CI runs every API test
+   as this role.)
+5. Set `AUDIT_S3_BUCKET` to a bucket created with Object Lock, so each day's audit log is copied where nobody can
+   delete it before `AUDIT_RETENTION_DAYS`; have the retention period confirmed (POPIA, Companies Act). Run
+   `audit:check-copies` periodically. (Built and tested against an S3 protocol server.)
 6. Commission an independent penetration test of the production setup.
 7. Set `REDIS_URL` before running more than one API process, so rate limits are shared.
 8. Register the Information Officer under POPIA and publish the privacy policy (already in RELEASE.md).

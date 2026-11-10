@@ -874,3 +874,13 @@ Passcode fallback, and "Sign out" on the lock screen.
   (tests: `TEST_REDIS_URL`). The API drains requests and closes its connections on SIGTERM.
 - Mobile registers the app's foreground state with `setVisibilitySource`, so `useLive` screens refresh only while the app
   is open.
+
+## Object storage, the restricted database role and audit copies (migrations 0035 and 0036)
+
+- Photographs go to an S3-compatible bucket with `MEDIA_S3_BUCKET` (the database keeps their details);
+  `pnpm --filter @quintara/api run media:to-objects` moves older ones. Deleted photographs' files are purged from the bucket.
+- `pnpm --filter @quintara/api run app-role` creates the role the API connects as: data only, the audit log append-only.
+  `TEST_AS_APP_ROLE=1` (with `TEST_ALL_ON_POSTGRES=1`) runs every API test as it.
+- With `AUDIT_S3_BUCKET` (a bucket with Object Lock), each day's audit log is copied write-once;
+  `pnpm --filter @quintara/api run audit:check-copies` compares the copies with the database.
+- Object storage tests: `TEST_S3_ENDPOINT` (with `TEST_S3_KEY`, `TEST_S3_SECRET`) points at an S3-compatible server.
