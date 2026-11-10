@@ -21,7 +21,7 @@ function toApplication(row: Row): Application {
 }
 
 const SELECT_APPLICATION = `
-  SELECT a.id, a.status, a.data, a.submitted_at, a.discount_minor, a.discount_reason, t.name AS tier_name, t.price_minor, t.currency_code
+  SELECT a.id, a.status, a.data, a.submitted_at, a.discount_minor, a.discount_reason, t.name AS tier_name, COALESCE(a.offered_price_minor, t.price_minor) AS price_minor, t.currency_code
     FROM membership_applications a LEFT JOIN membership_tiers t ON t.id = a.offered_tier_id`;
 
 async function findOpen(db: Queryable, userId: string): Promise<Row | undefined> {

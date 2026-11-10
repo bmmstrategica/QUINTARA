@@ -14,8 +14,7 @@ import { RuleBasedQeraModel } from '@quintara/domain';
 import type { QeraModel } from '@quintara/domain';
 import { ClaudeQeraModel, DEFAULT_QERA_MODEL, withFallback } from './qera-claude.ts';
 import { localNow } from './time.ts';
-import { createClient as createRedisClient } from 'redis';
-import { RedisRateLimiter } from './ratelimit.ts';
+import { redisRateLimiter } from './ratelimit.ts';
 import { auditObjectStore, mediaObjectStore } from './objects-config.ts';
 import { copyDueAuditDays } from './audit-export.ts';
 import { purgeDeletedMedia } from './media.ts';
@@ -141,11 +140,9 @@ const signInLimit = !production && Number(env0('SIGN_IN_LIMIT')) > 0 ? Number(en
 let rateLimiter: RateLimiter | undefined;
 let redis: { quit(): Promise<unknown> } | undefined;
 if (env0('REDIS_URL')) {
-  const client = createRedisClient({ url: env0('REDIS_URL') });
-  client.on('error', (error: Error) => console.error(`Redis: ${error.message}`));
-  await client.connect();
-  redis = client;
-  rateLimiter = new RedisRateLimiter(client, (error) => console.error(`Rate limits: ${error instanceof Error ? error.message : error}`));
+  const shared = redisRateLimiter(env0('REDIS_URL'), (message) => console.error(message));
+  redis = { quit: shared.quit };
+  rateLimiter = shared.limiter;
   console.log('Rate limits: shared through Redis.');
 } else if (production) {
   console.warn('Rate limits: counted in this process. Set REDIS_URL before running more than one API process.');

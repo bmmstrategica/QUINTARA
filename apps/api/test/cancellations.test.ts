@@ -142,5 +142,16 @@ test('two refunds asked for at once: the ledger records exactly what the provide
     assert.ok(refundsMade >= 1 && refundsMade <= 2);
     assert.equal(Number(p.refunded_minor), 500 * refundsMade, JSON.stringify(both.map((b) => b.status)));
     assert.ok(aura.memberPriceMinor > 500);
+
+    // Two different refunds at once that together exceed what is left: never more than was paid goes back.
+    const left = aura.memberPriceMinor - Number(p.refunded_minor);
+    const sixty = Math.ceil(left * 0.6);
+    const at = s.payments.refunds.length;
+    const pair = await Promise.all([1, 2].map((n) => admin('POST', `/admin/v1/payments/${paymentId}/refund`, { reason: `Refund ${n}.`, amountMinor: sixty })));
+    const sent = s.payments.refunds.slice(at).reduce((sum, r) => sum + r.amountMinor, 0);
+    const after = await paymentOf(s, booking.id);
+    assert.ok(Number(after.refunded_minor) <= aura.memberPriceMinor, 'never more than was paid');
+    assert.equal(Number(after.refunded_minor) - Number(p.refunded_minor), sent, 'the ledger matches the provider');
+    assert.ok(pair.some((r) => r.status === 200), JSON.stringify(pair.map((r) => [r.status, r.body])));
   } finally { await s.close(); }
 });

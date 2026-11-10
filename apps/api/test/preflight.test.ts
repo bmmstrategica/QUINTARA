@@ -24,6 +24,10 @@ test('a complete production configuration passes; the decisions still open are w
   assert.deepEqual(errors, []);
   assert.ok(warnings.some((w) => w.startsWith('Payments: no payment provider')));
   assert.ok(warnings.some((w) => w.includes('MEDIA_S3_BUCKET')));
+  // Calendars are optional: without their key the deployment still starts.
+  const noCalendar = checkDeployment({ ...good(), CALENDAR_SECRET: undefined as never });
+  assert.deepEqual(noCalendar.errors, []);
+  assert.ok(noCalendar.warnings.some((w) => w.startsWith('CALENDAR_SECRET is not set')));
 });
 
 test('each mistake is named', () => {

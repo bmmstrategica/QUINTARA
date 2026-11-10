@@ -24,7 +24,8 @@ export function checkDeployment(env: Record<string, string | undefined>): Findin
   if (!get('RESEND_API_KEY') || !get('EMAIL_FROM')) error('Set RESEND_API_KEY and EMAIL_FROM: sign-in codes and notifications are sent by email.');
 
   // Secrets: long enough, and never the same key twice (one leaked key must not open the others).
-  const secrets: [string, boolean][] = [['MFA_ENCRYPTION_KEY', true], ['CALENDAR_SECRET', true], ['WHATSAPP_NUMBER_SECRET', false], ['PAYMENTS_TEST_SECRET', false]];
+  // CALENDAR_SECRET is optional: without it members cannot connect a calendar (a warning, below).
+  const secrets: [string, boolean][] = [['MFA_ENCRYPTION_KEY', true], ['CALENDAR_SECRET', false], ['WHATSAPP_NUMBER_SECRET', false], ['PAYMENTS_TEST_SECRET', false]];
   for (const [key, required] of secrets) {
     const value = get(key);
     if (!value) { if (required) error(`Set ${key} (${SECRET_MIN} or more random characters).`); continue; }
@@ -68,6 +69,7 @@ export function checkDeployment(env: Record<string, string | undefined>): Findin
   if (stage === 'staging') {
     if (!get('PAYMENTS_TEST_SECRET')) error('Staging uses the test checkout: set PAYMENTS_TEST_SECRET (32+ random characters).');
     if (!get('API_URL')) error('Staging uses the test checkout: set API_URL to the API\'s public address, for its links.');
+    warn('Staging\'s test checkout keeps open checkouts in the API process: run one API process, and expect a checkout open during a restart to be reported as failed.');
   } else {
     warn('Payments: no payment provider is configured, so production refuses payments. This stays until a provider is chosen and its adapter added.');
   }
@@ -80,6 +82,7 @@ export function checkDeployment(env: Record<string, string | undefined>): Findin
   for (const prefix of ['MEDIA_S3', 'AUDIT_S3']) {
     if (get(`${prefix}_BUCKET`) && (!get(`${prefix}_ACCESS_KEY_ID`) || !get(`${prefix}_SECRET_ACCESS_KEY`))) warn(`${prefix}_BUCKET is set without its own keys: the host's default credentials will be used.`);
   }
+  if (!get('CALENDAR_SECRET')) warn('CALENDAR_SECRET is not set: members cannot connect a calendar to QÉRA.');
   if (!get('ANTHROPIC_API_KEY')) warn('ANTHROPIC_API_KEY is not set: QÉRA uses its built-in rule-based model.');
   const whatsapp = ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_BUSINESS_NUMBER', 'WHATSAPP_NUMBER_SECRET'];
   const setCount = whatsapp.filter((key) => get(key)).length;

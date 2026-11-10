@@ -91,3 +91,19 @@ test('in a bucket with Object Lock, a copy cannot be deleted before its retentio
     assert.equal((await checkAuditCopy(s.db, objects, 'audit_logs', '2026-11-01')).intact, true);
   } finally { await s.close(); }
 });
+
+test('a day is copied only once it has settled: an entry from a transaction begun before midnight is not left out', async () => {
+  const s = await startServer();
+  const objects = new MemoryObjectStore();
+  try {
+    await pastDay(s, '2026-11-01');
+    // Five minutes after midnight: 1 November is over, but a transaction begun at 23:59 may still be writing to it.
+    assert.deepEqual(await copyDueAuditDays(s.db, objects, { retentionDays: 30, now: new Date('2026-11-02T00:05:00Z') }), []);
+    // That late entry arrives, stamped with its transaction's start.
+    await s.ownerDb.query(`INSERT INTO audit_logs (action, entity_type, changes, occurred_at) VALUES ('late.entry', 'test', '{}'::jsonb, '2026-11-01T23:59:58Z')`);
+    assert.deepEqual(await copyDueAuditDays(s.db, objects, { retentionDays: 30, now: new Date('2026-11-02T00:20:00Z') }), ['2026-11-01']);
+    const copy = (await objects.get(auditCopyKey('audit_logs', '2026-11-01')))!.toString('utf8');
+    assert.ok(copy.includes('late.entry'), 'the late entry is in the copy');
+    assert.equal((await checkAuditCopy(s.db, objects, 'audit_logs', '2026-11-01')).intact, true);
+  } finally { await s.close(); }
+});

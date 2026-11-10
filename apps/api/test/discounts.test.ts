@@ -68,3 +68,19 @@ test('only finance grants discounts; impossible ones are refused; a full discoun
     assert.equal((await two.api.getApplication())!.status, 'active');             // nothing to pay
   } finally { await s.close(); }
 });
+
+test('a price change after approval does not change what an approved applicant pays', async () => {
+  const s = await startServer();
+  try {
+    const { api, app, admin, tierId, price } = await applicant(s, 'Price Change');
+    assert.equal((await admin('POST', `/admin/v1/applications/${app.id}/approve`, { tierId, discount: { kind: 'amount', value: 100_000, reason: 'Introduced by a member' } })).status, 204);
+    // Finance raise the plan's price while the applicant is deciding.
+    assert.ok((await admin('PATCH', `/admin/v1/tiers/${tierId}`, { priceMinor: price + 250_000 })).status < 300);
+    const fee = (await api.getApplication())!.fee!;
+    assert.deepEqual([fee.priceMinor, fee.dueMinor], [price, price - 100_000]);
+    await api.payMembershipFee();
+    assert.equal(s.payments.charges.at(-1)!.amountMinor, price - 100_000);
+    const recorded = (await s.db.query<{ amount_minor: string }>(`SELECT amount_minor FROM payments WHERE application_id = $1 AND status = 'paid'`, [app.id]))[0]!;
+    assert.equal(Number(recorded.amount_minor), price - 100_000);
+  } finally { await s.close(); }
+});

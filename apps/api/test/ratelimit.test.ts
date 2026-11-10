@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { test } from 'node:test';
 import { createClient } from 'redis';
-import { MemoryRateLimiter, RedisRateLimiter } from '../src/ratelimit.ts';
+import { MemoryRateLimiter, RedisRateLimiter, redisRateLimiter } from '../src/ratelimit.ts';
 import type { RedisLike } from '../src/ratelimit.ts';
 import { startServer } from './harness.ts';
 
@@ -73,6 +73,20 @@ test('if Redis cannot be reached, limits are still applied in this process, and 
   assert.deepEqual(counts, [1, 2, 3, 4]);
   assert.equal(reported.length, 1);
   await limiter.close();
+});
+
+test('with Redis down, as the API runs it: it starts at once, and every request is counted here without waiting', async () => {
+  // Nothing listens on this port: a real client, configured as the API configures it.
+  const started = Date.now();
+  const { limiter, quit } = redisRateLimiter('redis://127.0.0.1:9', () => {});
+  assert.ok(Date.now() - started < 200, 'creating it does not wait for Redis');
+  try {
+    for (let i = 1; i <= 3; i++) {
+      const t = Date.now();
+      assert.equal(await limiter.hit('sign-in', 'down@example.com'), i);
+      assert.ok(Date.now() - t < 1000, `request ${i} answered without waiting for Redis (${Date.now() - t} ms)`);
+    }
+  } finally { await quit(); }
 });
 
 test('the API stops cleanly on SIGTERM: it answers no more, closes its connections and exits 0', async () => {

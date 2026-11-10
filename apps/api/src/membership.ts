@@ -45,7 +45,7 @@ export async function prepareMembershipPayment(db: Db, ctx: RequestContext, prov
   if (!ctx.userId) throw unauthenticated();
   const userId = ctx.userId;
   const rows = await db.query<{ id: string; status: string; market_id: string; price_minor: string; discount_minor: string; currency_code: string; tier_name: string }>(
-    `SELECT a.id, a.status, a.market_id, t.price_minor, a.discount_minor, t.currency_code, t.name AS tier_name
+    `SELECT a.id, a.status, a.market_id, COALESCE(a.offered_price_minor, t.price_minor) AS price_minor, a.discount_minor, t.currency_code, t.name AS tier_name
        FROM membership_applications a JOIN membership_tiers t ON t.id = a.offered_tier_id
       WHERE a.user_id = $1 ORDER BY a.created_at DESC LIMIT 1`, [userId]);
   const application = rows[0];
@@ -56,13 +56,14 @@ export async function prepareMembershipPayment(db: Db, ctx: RequestContext, prov
   const key = idempotencyKey?.slice(0, 200) || `membership:${application.id}:${failed}`;
   // The plan's fee, less any discount the committee granted when approving.
   const amount = Number(application.price_minor) - Number(application.discount_minor), currency = application.currency_code.trim();
-  const payment = (await db.query<{ id: string; status: string; application_id: string | null }>(
+  const payment = (await db.query<{ id: string; status: string; application_id: string | null; amount_minor: string }>(
     `INSERT INTO payments (user_id, market_id, purpose, application_id, amount_minor, currency_code, provider, idempotency_key)
      VALUES ($1, $2, 'membership', $3, $4, $5, $6, $7)
-     ON CONFLICT (idempotency_key) DO UPDATE SET updated_at = now() RETURNING id, status, application_id`,
+     ON CONFLICT (idempotency_key) DO UPDATE SET updated_at = now() RETURNING id, status, application_id, amount_minor`,
     [userId, application.market_id, application.id, amount, currency, provider.name, key]))[0]!;
   if (payment.application_id !== application.id) throw conflict('That payment reference belongs to something else.');
-  return { paymentId: payment.id, key, amount, currency, description: `${application.tier_name} membership`, userId, alreadyPaid: payment.status === 'paid' };
+  // An attempt already prepared is charged what it recorded, so the ledger and the charge always agree.
+  return { paymentId: payment.id, key, amount: Number(payment.amount_minor), currency, description: `${application.tier_name} membership`, userId, alreadyPaid: payment.status === 'paid' };
 }
 
 /**

@@ -239,9 +239,12 @@ export async function payBooking(db: Db, ctx: RequestContext, provider: PaymentP
 
 /**
  * Refunds a paid payment: in full, or `amountMinor` of what is left. The person who paid is told; `actorUserId` (the
- * member, or the member of staff who decided it) is recorded in the audit log. Safe to repeat: each refund has its own
- * idempotency key, built from the amount already refunded, so a retried request is not refunded twice by the provider.
- * Returns the amount refunded (0 if nothing could be).
+ * member, or the member of staff who decided it) is recorded in the audit log. Returns the amount refunded (0 if
+ * nothing could be).
+ *
+ * The amount is reserved on the payment before the provider is asked, so two refunds at once can never return more
+ * than was paid: the second finds the payment changed and refunds nothing. A refusal (or an error) releases it. Each
+ * refund's idempotency key comes from the amount already refunded, so a retry is not refunded twice by the provider.
  */
 export async function refundPayment(db: Db, provider: PaymentProvider, actorUserId: string, paymentId: string, amountMinor?: number): Promise<number> {
   const payment = (await db.query<{ user_id: string; provider_payment_id: string | null; amount_minor: string; refunded_minor: string; currency_code: string; status: string }>(
@@ -251,18 +254,28 @@ export async function refundPayment(db: Db, provider: PaymentProvider, actorUser
   const amount = Math.min(left, amountMinor ?? left);
   if (amount <= 0) return 0;
   const currency = payment.currency_code.trim();
-  const result = await provider.refund({ providerPaymentId: payment.provider_payment_id, amountMinor: amount, currency, idempotencyKey: amount === Number(payment.amount_minor) ? `refund:${paymentId}` : `refund:${paymentId}:${payment.refunded_minor}:${amount}` });
+  const failed = async (reason: string) => { await audit(db, actorUserId, 'refund.failed', 'payment', paymentId, { reason, amountMinor: amount }); return 0; };
+
+  const reserved = await db.query(`UPDATE payments SET refunded_minor = refunded_minor + $2, updated_at = now() WHERE id = $1 AND status = 'paid' AND refunded_minor = $3 RETURNING id`,
+    [paymentId, amount, payment.refunded_minor]);
+  if (!reserved.length) return failed('Another refund of this payment was under way. Look at the payment again before refunding.');
+  const release = () => db.query(`UPDATE payments SET refunded_minor = refunded_minor - $2, updated_at = now() WHERE id = $1`, [paymentId, amount]);
+
+  let result: Awaited<ReturnType<PaymentProvider['refund']>>;
+  try {
+    result = await provider.refund({ providerPaymentId: payment.provider_payment_id, amountMinor: amount, currency, idempotencyKey: amount === Number(payment.amount_minor) ? `refund:${paymentId}` : `refund:${paymentId}:${payment.refunded_minor}:${amount}` });
+  } catch (error) {
+    await release();
+    return failed(error instanceof Error ? error.message : 'The payment provider could not be reached.');
+  }
   if (result.status === 'failed') {
-    // The cancellation stands; staff see this entry and settle the refund by hand.
-    await audit(db, actorUserId, 'refund.failed', 'payment', paymentId, { reason: result.reason, amountMinor: amount });
-    return 0;
+    // The cancellation (if any) stands; staff see this entry and settle the refund by hand.
+    await release();
+    return failed(result.reason);
   }
   const full = amount === left;
-  // Recorded only if nothing else was refunded meanwhile: two requests for the same refund carry the same idempotency
-  // key, so the provider refunds once, and the ledger must count it once.
-  const recorded = await db.query(`UPDATE payments SET status = CASE WHEN $3 THEN 'refunded' ELSE status END, refunded_minor = refunded_minor + $4, refunded_at = now(), provider_refund_id = $2, updated_at = now()
-     WHERE id = $1 AND refunded_minor = $5 AND status = 'paid' RETURNING id`, [paymentId, result.providerRefundId, full, amount, payment.refunded_minor]);
-  if (!recorded.length) return amount;
+  await db.query(`UPDATE payments SET status = CASE WHEN refunded_minor >= amount_minor THEN 'refunded' ELSE status END, refunded_at = now(), provider_refund_id = $2, updated_at = now() WHERE id = $1`,
+    [paymentId, result.providerRefundId]);
   await db.query(`INSERT INTO notifications (user_id, category, title) VALUES ($1, 'booking_confirmation', $2)`, [payment.user_id, `We have refunded ${formatMoney(amount, currency)} to your original payment method.`]);
   await audit(db, actorUserId, 'payment.refunded', 'payment', paymentId, { amountMinor: amount, partial: !full });
   return amount;

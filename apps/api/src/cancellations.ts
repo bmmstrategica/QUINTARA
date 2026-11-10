@@ -125,7 +125,7 @@ export async function refundPaymentForStaff(db: Db, ctx: RequestContext, provide
   if (input.amountMinor && input.amountMinor > left) throw validation([{ path: ['amountMinor'], message: 'That is more than is left to refund.', code: 'custom' } as never]);
   await audit(db, staffId, 'payment.refund_requested', 'payment', paymentId, { reason: input.reason, amountMinor: input.amountMinor ?? left });
   const refunded = await refundPayment(db, provider, staffId, paymentId, input.amountMinor);
-  if (refunded === 0) throw new HttpError(502, 'The payment provider did not make the refund. Nothing was returned; it is in the audit log as refund.failed.');
+  if (refunded === 0) throw new HttpError(502, 'The refund was not made: the payment provider refused it, or another refund of this payment was under way. Nothing was returned; the reason is in the audit log (refund.failed).');
   const after = (await db.query<{ status: 'paid' | 'refunded' }>('SELECT status FROM payments WHERE id = $1', [paymentId]))[0]!;
   return { paymentId, refundedMinor: refunded, status: after.status };
 }

@@ -82,8 +82,8 @@ export async function approveApplication(db: Db, ctx: RequestContext, id: string
       discountMinor = discount.kind === 'percent' ? Math.round((price * discount.value) / 100) : Math.round(discount.value);
       if (discountMinor > price) throw new HttpError(422, 'A discount cannot be more than the fee.', { discount: 'More than the fee' });
     }
-    await tx.query(`UPDATE membership_applications SET status = 'payment_pending', offered_tier_id = $2, reviewed_by = $3, decided_at = now(), updated_at = now(), discount_minor = $4, discount_reason = $5 WHERE id = $1`,
-      [id, tierId, staffId, discountMinor, discount?.reason ?? null]);
+    await tx.query(`UPDATE membership_applications SET status = 'payment_pending', offered_tier_id = $2, reviewed_by = $3, decided_at = now(), updated_at = now(), discount_minor = $4, offered_price_minor = $6, discount_reason = $5 WHERE id = $1`,
+      [id, tierId, staffId, discountMinor, discount?.reason ?? null, price]);
     await audit(tx, staffId, 'application.approved', 'membership_application', id, { tierId, discountMinor, discountReason: discount?.reason ?? null });
     // Nothing to pay (a complimentary tier, or a discount of the whole fee): the membership starts at once.
     if (price - discountMinor === 0) await activateApplication(tx, id, staffId);

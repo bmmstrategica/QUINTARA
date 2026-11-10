@@ -19,13 +19,16 @@ import type { ObjectStore } from './objects.ts';
 export const AUDIT_LOGS = ['audit_logs', 'staff_activity'] as const;
 export type AuditLogName = (typeof AUDIT_LOGS)[number];
 const DAY = 86_400_000;
+/** How long after midnight (UTC) a day is copied: long enough for every transaction begun that day to have finished. */
+export const SETTLE_MS = 15 * 60_000;
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 export const auditCopyKey = (log: AuditLogName, day: string) => `audit/${log}/${day.slice(0, 4)}/${day.slice(5, 7)}/${day.slice(8, 10)}.jsonl`;
 
 async function entriesOf(db: Queryable, log: AuditLogName, day: string) {
   // The table name is one of two fixed strings, never input.
   return db.query<Record<string, unknown> & { seq: string; hash: string }>(
-    `SELECT * FROM ${log} WHERE occurred_at >= $1::date AND occurred_at < $1::date + 1 ORDER BY seq`, [day]);
+    // A UTC day, whatever time zone the database session uses.
+    `SELECT * FROM ${log} WHERE occurred_at >= ($1::date)::timestamp AT TIME ZONE 'UTC' AND occurred_at < ($1::date + 1)::timestamp AT TIME ZONE 'UTC' ORDER BY seq`, [day]);
 }
 const line = (row: Record<string, unknown>) => JSON.stringify(row, (_key, value) => (value instanceof Date ? value.toISOString() : typeof value === 'bigint' ? value.toString() : value));
 
@@ -51,8 +54,10 @@ export async function copyAuditDay(db: Db, objects: ObjectStore, day: string, re
  * entries up to yesterday (UTC). Run by housekeeping; cheap when there is nothing to do.
  */
 export async function copyDueAuditDays(db: Db, objects: ObjectStore, options: { retentionDays: number; now?: Date; maxDays?: number }): Promise<string[]> {
-  const today = isoDay(options.now ?? new Date());
-  const first = (await db.query<{ day: string | null }>(`SELECT to_char(min(d), 'YYYY-MM-DD') AS day FROM (SELECT min(occurred_at) AS d FROM audit_logs UNION ALL SELECT min(occurred_at) FROM staff_activity) t`))[0]?.day;
+  // A day is copied only once it has been over for a while: an entry is stamped when its transaction began, so one
+  // begun just before midnight can be written just after it. Copies are write-once, so copying too early loses it.
+  const today = isoDay(new Date((options.now ?? new Date()).getTime() - SETTLE_MS));
+  const first = (await db.query<{ day: string | null }>(`SELECT to_char(min(d) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day FROM (SELECT min(occurred_at) AS d FROM audit_logs UNION ALL SELECT min(occurred_at) FROM staff_activity) t`))[0]?.day;
   if (!first) return [];
   const copied = new Set((await db.query<{ day: string }>(`SELECT to_char(day, 'YYYY-MM-DD') AS day FROM audit_exports GROUP BY day HAVING count(*) = $1`, [AUDIT_LOGS.length])).map((r) => r.day));
   const days: string[] = [];

@@ -10,6 +10,7 @@
  *   says so in the log) rather than refusing everyone or limiting no one.
  */
 import { createHash } from 'node:crypto';
+import { createClient } from 'redis';
 
 export interface RateLimiter {
   /** Records one attempt and returns how many this key has made in the current window, this one included. */
@@ -37,6 +38,8 @@ export class MemoryRateLimiter implements RateLimiter {
 
 /** The part of a Redis client this needs (node-redis's client provides it). */
 export interface RedisLike {
+  /** False while the client is (re)connecting: then nothing is sent, and the attempt is counted here at once. */
+  readonly isReady?: boolean;
   multi(): { incr(key: string): unknown; pExpire(key: string, ms: number, mode?: 'NX'): unknown; exec(): Promise<unknown[]> };
 }
 
@@ -52,6 +55,10 @@ export class RedisRateLimiter implements RateLimiter {
 
   async hit(bucket: string, key: string, windowMs = MINUTE): Promise<number> {
     const id = `${this.prefix}${bucket}:${createHash('sha256').update(key).digest('base64url').slice(0, 22)}`;
+    if (this.client.isReady === false) {
+      if (!this.failing) { this.failing = true; this.onError(new Error('Redis is not connected; counting in this process until it is.')); }
+      return this.fallback.hit(bucket, key, windowMs);
+    }
     try {
       const multi = this.client.multi();
       multi.incr(id);
@@ -65,4 +72,23 @@ export class RedisRateLimiter implements RateLimiter {
     }
   }
   async close() { await this.fallback.close(); }
+}
+
+/**
+ * A limiter on the Redis at `url`, as the API runs it. While Redis is unreachable, commands fail at once (no offline
+ * queue), so requests are counted in this process instead of waiting for Redis. Returns at once: the client connects,
+ * and reconnects, in the background, so the API starts and serves even when Redis is down.
+ */
+export function redisRateLimiter(url: string, log: (message: string) => void): { limiter: RedisRateLimiter; quit: () => Promise<void> } {
+  const client = createClient({ url, disableOfflineQueue: true });
+  client.on('error', (error: Error) => log(`Redis: ${error.message}`));
+  client.connect().catch((error: Error) => log(`Redis: ${error.message}`));
+  const limiter = new RedisRateLimiter(client as unknown as RedisLike, (error) => log(`Rate limits: ${error instanceof Error ? error.message : String(error)}`));
+  // Quitting waits for Redis to answer, so a client that is not connected is dropped instead (or shutdown would wait).
+  const quit = async () => {
+    if (client.isReady) await client.quit().catch(() => undefined);
+    else client.destroy();
+    await limiter.close();
+  };
+  return { limiter, quit };
 }
