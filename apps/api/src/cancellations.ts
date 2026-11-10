@@ -16,7 +16,7 @@ import { z } from 'zod';
 import { audit, requireStaff } from './context.ts';
 import type { RequestContext } from './context.ts';
 import type { Db } from './db.ts';
-import { conflict, forbidden, notFound, validation } from './errors.ts';
+import { conflict, forbidden, HttpError, notFound, validation } from './errors.ts';
 import { refundPayment } from './experiences.ts';
 import type { PaymentProvider } from './payments.ts';
 
@@ -97,4 +97,35 @@ export async function cancelExperience(db: Db, ctx: RequestContext, provider: Pa
     if (amount > 0) { refunds++; total += amount; } else failed++;
   }
   return { experienceId, bookingsCancelled: plan.bookings, refunds, refundedMinor: total, currency: plan.currency, refundsFailed: failed };
+}
+
+const refundInput = z.object({
+  reason,
+  /** Part of what is left; the whole of it when left out. */
+  amountMinor: z.number().int().positive().optional(),
+});
+
+export interface StaffRefund { paymentId: string; refundedMinor: number; status: 'paid' | 'refunded' }
+
+/**
+ * A refund decided by finance, from the payments ledger: the money only, whatever it paid for (a goodwill refund, a
+ * booking cancelled earlier without one, a refund the provider first refused). Nothing is cancelled by it. The payer
+ * is told; the reason is kept in the audit log.
+ */
+export async function refundPaymentForStaff(db: Db, ctx: RequestContext, provider: PaymentProvider, paymentId: string, body: unknown): Promise<StaffRefund> {
+  const staffId = requireStaff(ctx, 'admin.finance.manage');
+  const parsed = refundInput.safeParse(body);
+  if (!parsed.success) throw validation(parsed.error.issues);
+  const input = parsed.data;
+  const payment = UUID.test(paymentId) ? (await db.query<{ status: string; amount_minor: string; refunded_minor: string }>(
+    'SELECT status, amount_minor, refunded_minor FROM payments WHERE id = $1', [paymentId]))[0] : undefined;
+  if (!payment) throw notFound('This payment does not exist.');
+  const left = Number(payment.amount_minor) - Number(payment.refunded_minor);
+  if (payment.status !== 'paid' || left <= 0) throw conflict('Only a payment that was received, and not yet refunded in full, can be refunded.');
+  if (input.amountMinor && input.amountMinor > left) throw validation([{ path: ['amountMinor'], message: 'That is more than is left to refund.', code: 'custom' } as never]);
+  await audit(db, staffId, 'payment.refund_requested', 'payment', paymentId, { reason: input.reason, amountMinor: input.amountMinor ?? left });
+  const refunded = await refundPayment(db, provider, staffId, paymentId, input.amountMinor);
+  if (refunded === 0) throw new HttpError(502, 'The payment provider did not make the refund. Nothing was returned; it is in the audit log as refund.failed.');
+  const after = (await db.query<{ status: 'paid' | 'refunded' }>('SELECT status FROM payments WHERE id = $1', [paymentId]))[0]!;
+  return { paymentId, refundedMinor: refunded, status: after.status };
 }

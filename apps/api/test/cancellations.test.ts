@@ -100,3 +100,47 @@ test('cancelling an experience cancels every booking and refunds everyone in ful
     assert.equal(audited.length, 1);
   } finally { await s.close(); }
 });
+
+test('finance refund a payment from the ledger, in part then the rest; the payer is told; nothing is cancelled', async () => {
+  const s = await startServer();
+  try {
+    const { api, booking, aura } = await paidBooking(s, 'thandi@example.com');
+    const paymentId = (await s.db.query<{ id: string }>(`SELECT id FROM payments WHERE booking_id = $1 AND status = 'paid'`, [booking.id]))[0]!.id;
+    const price = aura.memberPriceMinor;
+    const desk = await s.staff('desk@example.com');
+    assert.equal((await desk('POST', `/admin/v1/payments/${paymentId}/refund`, { reason: 'Goodwill.' })).status, 403);
+    const admin = await s.staff('admin@example.com');
+    assert.equal((await admin('POST', `/admin/v1/payments/${paymentId}/refund`, { reason: 'x' })).status, 422);                         // a reason is needed
+    assert.equal((await admin('POST', `/admin/v1/payments/${paymentId}/refund`, { reason: 'Too much.', amountMinor: price + 1 })).status, 422);
+
+    const part = await admin('POST', `/admin/v1/payments/${paymentId}/refund`, { reason: 'The view was blocked.', amountMinor: 1000 });
+    assert.deepEqual([part.status, part.body.refundedMinor, part.body.status], [200, 1000, 'paid']);
+    assert.equal((await api.listBookings()).find((b) => b.id === booking.id)!.status, 'confirmed');                                    // money only
+    const rest = await admin('POST', `/admin/v1/payments/${paymentId}/refund`, { reason: 'Goodwill after the venue changed.' });
+    assert.deepEqual([rest.body.refundedMinor, rest.body.status], [price - 1000, 'refunded']);
+    assert.equal((await admin('POST', `/admin/v1/payments/${paymentId}/refund`, { reason: 'Once more.' })).status, 409);
+    const ledger = (await admin('GET', '/admin/v1/payments')).body.payments.find((p: any) => p.id === paymentId);
+    assert.deepEqual([ledger.status, ledger.refundedMinor], ['refunded', price]);
+    assert.equal((await api.listNotifications()).filter((n) => n.title.startsWith('We have refunded')).length, 2);
+    const reasons = (await s.db.query<{ changes: { reason: string } }>(`SELECT changes FROM audit_logs WHERE action = 'payment.refund_requested' AND entity_id = $1 ORDER BY occurred_at`, [paymentId])).map((a) => a.changes.reason);
+    assert.deepEqual(reasons, ['The view was blocked.', 'Goodwill after the venue changed.']);
+  } finally { await s.close(); }
+});
+
+test('two refunds asked for at once: the ledger records exactly what the provider refunded', async () => {
+  const s = await startServer();
+  try {
+    const { booking, aura } = await paidBooking(s, 'daniel@example.com');
+    const paymentId = (await s.db.query<{ id: string }>(`SELECT id FROM payments WHERE booking_id = $1 AND status = 'paid'`, [booking.id]))[0]!.id;
+    const admin = await s.staff('admin@example.com');
+    const before = s.payments.refunds.length;
+    const both = await Promise.all([1, 2].map(() => admin('POST', `/admin/v1/payments/${paymentId}/refund`, { reason: 'Double click.', amountMinor: 500 })));
+    const p = await paymentOf(s, booking.id);
+    // However the two requests interleave, the ledger records exactly what the provider refunded: once per distinct
+    // refund (the same key twice is one refund at the provider), never more.
+    const refundsMade = new Set(s.payments.refunds.slice(before).map((r) => r.idempotencyKey)).size;
+    assert.ok(refundsMade >= 1 && refundsMade <= 2);
+    assert.equal(Number(p.refunded_minor), 500 * refundsMade, JSON.stringify(both.map((b) => b.status)));
+    assert.ok(aura.memberPriceMinor > 500);
+  } finally { await s.close(); }
+});

@@ -258,7 +258,11 @@ export async function refundPayment(db: Db, provider: PaymentProvider, actorUser
     return 0;
   }
   const full = amount === left;
-  await db.query(`UPDATE payments SET status = CASE WHEN $3 THEN 'refunded' ELSE status END, refunded_minor = refunded_minor + $4, refunded_at = now(), provider_refund_id = $2, updated_at = now() WHERE id = $1`, [paymentId, result.providerRefundId, full, amount]);
+  // Recorded only if nothing else was refunded meanwhile: two requests for the same refund carry the same idempotency
+  // key, so the provider refunds once, and the ledger must count it once.
+  const recorded = await db.query(`UPDATE payments SET status = CASE WHEN $3 THEN 'refunded' ELSE status END, refunded_minor = refunded_minor + $4, refunded_at = now(), provider_refund_id = $2, updated_at = now()
+     WHERE id = $1 AND refunded_minor = $5 AND status = 'paid' RETURNING id`, [paymentId, result.providerRefundId, full, amount, payment.refunded_minor]);
+  if (!recorded.length) return amount;
   await db.query(`INSERT INTO notifications (user_id, category, title) VALUES ($1, 'booking_confirmation', $2)`, [payment.user_id, `We have refunded ${formatMoney(amount, currency)} to your original payment method.`]);
   await audit(db, actorUserId, 'payment.refunded', 'payment', paymentId, { amountMinor: amount, partial: !full });
   return amount;

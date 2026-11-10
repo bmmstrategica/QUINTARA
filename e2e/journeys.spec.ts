@@ -344,3 +344,33 @@ test('QÉRA plans a weekend as a document, and books a seat once the member says
   await page.goto(`${WEB}/bookings`);
   await expect(page.locator('article.item-row').filter({ hasText: 'The Executive Yacht Club' })).toContainText('2 seats');
 });
+
+test('finance refund part of a payment from the ledger; the member is told, and the booking stands', async ({ browser }) => {
+  const member = await browser.newPage();
+  member.on('dialog', (dialog) => void dialog.accept());
+  await webSignIn(member, 'chloe@example.com');
+  await member.goto(`${WEB}/experiences`);
+  await member.locator('article.item-row').filter({ hasText: 'The Aura Enclave' }).getByRole('link', { name: 'View details' }).click();
+  await member.getByRole('button', { name: /^(RSVP|Reserve)$/ }).click();
+  await member.getByRole('button', { name: /^Pay R/ }).click();
+  await member.waitForURL(/\/v1\/payments\/test-checkout\//);
+  await member.getByRole('link', { name: 'Pay', exact: true }).click();
+  await expect(member.getByText('Your payment is confirmed')).toBeVisible();
+
+  const finance = await browser.newPage();
+  finance.on('dialog', (dialog) => void dialog.accept());
+  await adminSignIn(finance, 'admin@example.com');
+  await finance.goto(`${ADMIN}/payments`);
+  const row = finance.getByRole('row').filter({ hasText: 'Chloe van der Merwe' }).filter({ hasText: 'The Aura Enclave' }).first();
+  await row.getByRole('button', { name: 'Refund' }).click();
+  await finance.getByRole('combobox', { name: /^Refund/ }).selectOption('part');
+  await finance.getByLabel(/^Amount, in/).fill('100');
+  await finance.getByLabel('Reason, kept in the audit log').fill('The view was blocked by scaffolding.');
+  await finance.getByRole('button', { name: /^Refund R/ }).click();
+  await expect(row.getByText(/returned/)).toBeVisible();
+
+  await member.goto(`${WEB}/notifications`);
+  await expect(member.getByText(/We have refunded R\s?100/).first()).toBeVisible();
+  await member.goto(`${WEB}/bookings`);
+  await expect(member.locator('article.item-row').filter({ hasText: 'The Aura Enclave' }).getByText(/confirmed/i).first()).toBeVisible();
+});

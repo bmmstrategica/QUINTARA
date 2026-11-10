@@ -190,6 +190,8 @@ export interface AdminApi {
   decideBooking(bookingId: string, decision: 'confirm' | 'decline'): Promise<void>;
   /** Cancels a member's booking with a reason; a refund (full, part, none) needs the finance permission. */
   cancelBooking(bookingId: string, input: { reason: string; refund: 'full' | 'partial' | 'none'; amountMinor?: number }): Promise<{ bookingId: string; status: 'cancelled'; refundedMinor: number; refundFailed: boolean }>;
+  /** Refunds a received payment, in full or `amountMinor` of what is left (finance only). Cancels nothing. */
+  refundPayment(paymentId: string, input: { reason: string; amountMinor?: number }): Promise<{ paymentId: string; refundedMinor: number; status: 'paid' | 'refunded' }>;
   /** Cancels a whole experience: every booking cancelled and every payment refunded in full, each guest told why. */
   cancelExperience(experienceId: string, reason: string): Promise<{ experienceId: string; bookingsCancelled: number; refunds: number; refundedMinor: number; currency: string; refundsFailed: number }>;
   checkIn(ticketCode: string): Promise<{ fullName: string; seats: number; experienceTitle: string }>;
@@ -332,6 +334,7 @@ export function createAdminApi(options: HttpApiOptions): AdminApi {
     decideBooking: (bookingId, decision) => request('POST', `/admin/v1/bookings/${id(bookingId)}/decision`, { decision }),
     cancelBooking: (bookingId, input) => request('POST', `/admin/v1/bookings/${id(bookingId)}/cancel`, input),
     cancelExperience: (experienceId, reason) => request('POST', `/admin/v1/experiences/${id(experienceId)}/cancel`, { reason }),
+    refundPayment: (paymentId, input) => request('POST', `/admin/v1/payments/${id(paymentId)}/refund`, input),
     checkIn: (ticketCode) => request('POST', '/admin/v1/check-in', { ticketCode }),
     listBusinessListings: () => request('GET', '/admin/v1/business/listings'),
     reviewListing: (listingId, decision, note) => request('POST', `/admin/v1/business/listings/${id(listingId)}/review`, { decision, note }),
