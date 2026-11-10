@@ -361,7 +361,7 @@ test('finance refund part of a payment from the ledger; the member is told, and 
   finance.on('dialog', (dialog) => void dialog.accept());
   await adminSignIn(finance, 'admin@example.com');
   await finance.goto(`${ADMIN}/payments`);
-  const row = finance.getByRole('row').filter({ hasText: 'Chloe van der Merwe' }).filter({ hasText: 'The Aura Enclave' }).first();
+  const row = finance.getByRole('listitem').filter({ hasText: 'Chloe van der Merwe' }).filter({ hasText: 'The Aura Enclave' }).first();
   await row.getByRole('button', { name: 'Refund' }).click();
   await finance.getByRole('combobox', { name: /^Refund/ }).selectOption('part');
   await finance.getByLabel(/^Amount, in/).fill('100');

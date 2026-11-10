@@ -34,8 +34,13 @@ test('the overview is counted from the database and moves when members act', asy
     assert.equal(after.concierge.openRequests, d.concierge.openRequests + 1);
     assert.equal(after.concierge.newRequests, d.concierge.newRequests + 1);
     assert.equal(after.experiences.seatsBooked, d.experiences.seatsBooked + 2);
-    // Never a name or an email anywhere in it.
-    assert.ok(!/thandi|@example\.com/i.test(JSON.stringify(after)));
+    // Needs attention, as the design shows it: who is waiting, for the roles that act on it. Never an email address.
+    assert.ok(after.attention.some((x: any) => x.kind === 'request' && x.title === 'Airport transfer' && x.detail.startsWith('Thandi Mokoena') && x.href.startsWith('/concierge/')));
+    // The seats just booked were confirmed at once, so they wait on nobody and are not listed.
+    assert.ok(!after.attention.some((x: any) => x.kind === 'booking' && x.title === 'The Executive Yacht Club'));
+    assert.ok(!/@example\.com/i.test(JSON.stringify(after)));
+    // A role that handles none of these (content) sees none of them, and so no names.
+    assert.deepEqual((await (await s.staff('content@example.com'))('GET', '/admin/v1/dashboard')).body.attention, []);
   } finally { await s.close(); }
 });
 

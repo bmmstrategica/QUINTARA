@@ -51,7 +51,7 @@ test('payments and members export as CSV for the roles allowed, every export aud
     const lines = ledger.body.trim().split('\r\n');
     assert.match(lines[0]!, /^"Time \(UTC\)","Payer","For"/);
     assert.ok(lines.some((l) => l.includes(`"'=HYPERLINK(""http://evil.example"")"`)), 'the formula is neutralised with an apostrophe');
-    assert.ok(lines.some((l) => l.includes('"The Aura Enclave"')));
+    assert.ok(lines.some((l) => l.includes('"The Aura Enclave, 1 seat"')), 'what was paid for, as a person would say it');
 
     const members = await s.app.inject({ method: 'GET', url: '/admin/v1/members/export', headers: { cookie: admin } });
     assert.equal(members.statusCode, 200);

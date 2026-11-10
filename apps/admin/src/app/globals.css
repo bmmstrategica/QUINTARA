@@ -176,3 +176,19 @@ input[type="file"] { padding: 8px; }
 .tip div { display: flex; justify-content: space-between; gap: 14px; color: var(--q-muted); }
 .tip div span:last-child { color: var(--q-ink); font-variant-numeric: tabular-nums; }
 .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; align-items: start; }
+
+/* Lists, as the design draws them: a round mark, a title with a line below it, and what belongs at the end. */
+.list { display: flex; flex-direction: column; }
+.list-row { display: flex; align-items: center; gap: 14px; width: 100%; border-bottom: 1px solid var(--q-line); padding: 14px 0; min-height: 64px; }
+.list-row:first-child { border-top: 1px solid var(--q-line); }
+.list-row .lead { width: 40px; height: 40px; flex: none; border-radius: 50%; border: 1px solid var(--q-line); display: grid; place-items: center; color: var(--champ); }
+.list-row .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.list-row .txt b { font-weight: 400; font-size: 15.5px; color: var(--q-ink); }
+.list-row .txt span { color: var(--q-muted); font-size: 13px; font-weight: 300; }
+.list-row .trail { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+svg.ic { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.refund-form { padding: 6px 0 14px 54px; }
+@media (max-width: 640px) { .list-row { flex-wrap: wrap; } .list-row .trail { width: 100%; justify-content: flex-start; padding-left: 54px; } .refund-form { padding-left: 0; } }
+.eyebrow { margin: 0 0 4px; color: var(--q-muted); font-size: 13px; letter-spacing: 0.04em; }
+.list-row.link { text-decoration: none; color: inherit; }
+.list-row.link:hover .txt b { text-decoration: underline; text-underline-offset: 3px; }

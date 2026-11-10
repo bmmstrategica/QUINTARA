@@ -7,7 +7,7 @@
  */
 import { Fragment, useEffect, useState } from 'react';
 import type { StaffPayment, StaffPaymentsPage } from '@quintara/api-client';
-import { fmtDate, fmtMoney, useAdmin, useCan, useRun } from '@/lib/admin';
+import { fmtAmount, fmtDate, fmtMoney, useAdmin, useCan, useRun } from '@/lib/admin';
 
 const TONE: Record<StaffPayment['status'], string> = { paid: 'ok', refunded: 'gold', pending: '', failed: '' };
 const LABEL: Record<StaffPayment['status'], string> = { paid: 'Paid', refunded: 'Refunded', pending: 'Pending', failed: 'Failed' };
@@ -22,10 +22,10 @@ export default function PaymentsPage() {
   const canRefund = useCan('admin.finance.manage');
   const [refunding, setRefunding] = useState<string | null>(null);
   // A refund changes one row: it is updated in place, so the pages already loaded stay as they are.
-  const refunded = (id: string, amountMinor: number, status: StaffPayment['status']) => {
+  const onRefunded = (id: string, amountMinor: number, status: StaffPayment['status']) => {
     setRefunding(null);
     setPage((current) => current && { ...current, payments: current.payments.map((p) => (p.id === id ? { ...p, refundedMinor: p.refundedMinor + amountMinor, status } : p)),
-      totals: current.totals.map((t) => (t.currency === current.payments.find((p) => p.id === id)?.currency ? { ...t, receivedMinor: t.receivedMinor - amountMinor } : t)) });
+      totals: current.totals.map((t) => (t.currency === current.payments.find((p) => p.id === id)?.currency ? { ...t, receivedMinor: t.receivedMinor - amountMinor, refundedMinor: t.refundedMinor + amountMinor } : t)) });
   };
 
   useEffect(() => {
@@ -43,33 +43,42 @@ export default function PaymentsPage() {
     setPage({ ...next, payments: [...page.payments, ...next.payments] });
   });
 
+  const currency = page?.totals[0]?.currency ?? 'ZAR';
+  const received = (page?.totals ?? []).reduce((n, t) => n + t.receivedMinor + t.refundedMinor, 0);
+  const refunded = (page?.totals ?? []).reduce((n, t) => n + t.refundedMinor, 0);
   return (
     <>
-      <div><h1>Payments</h1><p className="lede">A record of what was charged and returned. Card details are held by the payment provider and never reach Quintara.</p></div>
+      <div><h1>Payments</h1><p className="lede">Every membership fee, experience and boutique payment. Card details stay with the payment provider.</p></div>
       {problem ? <p className="error" role="alert">{problem}</p> : !page ? <p className="muted" role="status">Loading</p> : (
         <>
+          {/* As the design: what came in, what went back, and how many payments. Totals cover every payment, not only those shown. */}
+          <div className="stats">
+            <div className="panel stat"><b>{fmtAmount(received, currency)}</b><span className="muted">Received</span></div>
+            <div className="panel stat"><b>{fmtAmount(refunded, currency)}</b><span className="muted">Refunded</span></div>
+            <div className="panel stat"><b>{page.count}</b><span className="muted">Transactions</span></div>
+          </div>
           <div className="row">
-            {page.totals.length ? page.totals.map((t) => <span className="chip ok" key={t.currency}>Received, less refunds: {t.receivedMinor ? fmtMoney(t.receivedMinor, t.currency) : `${t.currency} 0`}</span>) : <span className="chip">Nothing received yet</span>}
             <label className="check">Show<select value={show} onChange={(event) => setShow(event.target.value as typeof show)}><option value="all">Everything</option>{(Object.keys(LABEL) as StaffPayment['status'][]).map((k) => <option key={k} value={k}>{LABEL[k]}</option>)}</select></label>
             <a className="btn ghost" href={api.paymentsExportUrl()}>Export the ledger as CSV</a>
           </div>
           {page.payments.length === 0 ? <p className="note">No payments to show.</p> : (
-            <div className="scroll"><table>
-              <thead><tr><th>When</th><th>From</th><th>For</th><th>Amount</th><th>Status</th>{canRefund ? <th></th> : null}</tr></thead>
-              <tbody>{page.payments.map((p) => (
-                <Fragment key={p.id}>
-                <tr>
-                  <td>{fmtDate(p.createdAt)}</td>
-                  <td>{p.payer}</td>
-                  <td>{p.description}<small>{p.purpose[0]?.toUpperCase() + p.purpose.slice(1)}, via {p.provider}</small></td>
-                  <td>{fmtMoney(p.amountMinor, p.currency)}{p.refundedMinor ? <small>{fmtMoney(p.refundedMinor, p.currency)} returned</small> : null}</td>
-                  <td><span className={`chip ${TONE[p.status]}`}>{LABEL[p.status]}</span>{p.failureReason ? <small>{p.failureReason}</small> : null}</td>
-                  {canRefund ? <td>{p.status === 'paid' && p.amountMinor > p.refundedMinor ? <button className="btn ghost" aria-expanded={refunding === p.id} onClick={() => setRefunding(refunding === p.id ? null : p.id)}>Refund</button> : null}</td> : null}
-                </tr>
-                {refunding === p.id ? <RefundRow payment={p} onDone={refunded} /> : null}
-                </Fragment>
-              ))}</tbody>
-            </table></div>
+            <div className="list" role="list" aria-label="Payments">{page.payments.map((p) => (
+              <Fragment key={p.id}>
+                <div className="list-row" role="listitem">
+                  <span className="lead" aria-hidden="true"><CardIcon /></span>
+                  <span className="txt">
+                    <b>{p.description}</b>
+                    <span>{p.payer}. {fmtDate(p.createdAt)}{p.refundedMinor ? `. ${fmtMoney(p.refundedMinor, p.currency)} returned` : ''}{p.failureReason ? `. ${p.failureReason}` : ''}</span>
+                  </span>
+                  <span className="trail">
+                    <span>{fmtMoney(p.amountMinor, p.currency)}</span>
+                    <span className={`chip ${TONE[p.status]}`}>{LABEL[p.status]}</span>
+                    {canRefund && p.status === 'paid' && p.amountMinor > p.refundedMinor ? <button className="btn ghost small" aria-expanded={refunding === p.id} aria-label={`Refund ${p.description}`} onClick={() => setRefunding(refunding === p.id ? null : p.id)}>Refund</button> : null}
+                  </span>
+                </div>
+                {refunding === p.id ? <RefundRow payment={p} onDone={onRefunded} /> : null}
+              </Fragment>
+            ))}</div>
           )}
           <p className="muted">Showing {page.payments.length} of {page.count}.</p>
           {more.error ? <p className="error" role="alert">{more.error}</p> : null}
@@ -78,6 +87,11 @@ export default function PaymentsPage() {
       )}
     </>
   );
+}
+
+/** The card mark from the design's icon set. */
+function CardIcon() {
+  return <svg className="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12.5" rx="1.8" /><path d="M3 10.5h18M6.5 15h4" /></svg>;
 }
 
 /** Refunding one payment: all that is left of it, or part, and why. The payer is told; nothing is cancelled. */
@@ -98,7 +112,7 @@ function RefundRow({ payment: p, onDone }: { payment: StaffPayment; onDone: (id:
     });
   };
   return (
-    <tr><td colSpan={6}>
+    <div className="refund-form">
       <div className="panel">
         <p className="muted" style={{ margin: 0 }}>{fmtMoney(left, p.currency)} of this payment can be refunded. A refund returns money only: it does not cancel the booking, order or membership it paid for.</p>
         <div className="row">
@@ -109,6 +123,6 @@ function RefundRow({ payment: p, onDone }: { payment: StaffPayment; onDone: (id:
         {error ? <p className="error" role="alert">{error}</p> : null}
         <div className="row"><button className="btn" disabled={pending || !valid} onClick={submit}>{pending ? 'Refunding' : `Refund ${amountMinor > 0 && amountMinor <= left ? fmtMoney(amountMinor, p.currency) : ''}`.trim()}</button></div>
       </div>
-    </td></tr>
+    </div>
   );
 }

@@ -347,14 +347,24 @@ export async function updateTier(db: Db, ctx: RequestContext, id: string, body: 
 /* ---------- Payments ledger (read only) ---------- */
 
 const PAYMENT_SELECT = `SELECT p.id, p.purpose, p.amount_minor, p.refunded_minor, p.currency_code, p.status, p.provider, p.failure_reason, p.created_at,
-            COALESCE(pr.full_name, a.data->>'fullName', 'Applicant') AS payer,
-            COALESCE(e.title, t.name || ' membership', initcap(p.purpose)) AS description
+            COALESCE(pr.full_name, a.data->>'fullName', o.delivery_name, 'Applicant') AS payer,
+            -- What was paid for, as a person would say it: 'Costa Convivio, 2 seats', 'Maison Quintara order Q-20431'.
+            CASE p.purpose
+              WHEN 'experience' THEN COALESCE(e.title || ', ' || b.seats || CASE WHEN b.seats = 1 THEN ' seat' ELSE ' seats' END, 'An experience')
+              WHEN 'boutique' THEN COALESCE('Maison Quintara order ' || o.order_number, 'A Maison Quintara order')
+              WHEN 'membership' THEN COALESCE(t.name || ' membership', 'Membership fee')
+              WHEN 'membership_renewal' THEN COALESCE(rt.name || ' membership renewal', 'Membership renewal')
+              ELSE initcap(replace(p.purpose, '_', ' '))
+            END AS description
        FROM payments p
        LEFT JOIN profiles pr ON pr.user_id = p.user_id
        LEFT JOIN membership_applications a ON a.id = p.application_id
        LEFT JOIN membership_tiers t ON t.id = a.offered_tier_id
        LEFT JOIN experience_bookings b ON b.id = p.booking_id
-       LEFT JOIN experiences e ON e.id = b.experience_id`;
+       LEFT JOIN experiences e ON e.id = b.experience_id
+       LEFT JOIN orders o ON o.id = p.order_id
+       LEFT JOIN members rm ON rm.id = p.member_id
+       LEFT JOIN membership_tiers rt ON rt.id = rm.tier_id`;
 const toPayment = (r: Record<string, unknown>) => ({
   id: r.id as string, purpose: r.purpose as string, payer: r.payer as string, description: r.description as string,
   amountMinor: Number(r.amount_minor), refundedMinor: Number(r.refunded_minor), currency: (r.currency_code as string).trim(),
@@ -377,13 +387,14 @@ export async function listPayments(db: Queryable, ctx: RequestContext, query: un
   // No card details exist to show: only the provider's reference is ever stored.
   const rows = await db.query(`${PAYMENT_SELECT} WHERE ($1::text IS NULL OR p.status = $1) ORDER BY p.created_at DESC, p.id DESC LIMIT $2 OFFSET $3`, [q.status ?? null, q.limit, q.offset]);
   const count = Number((await db.query<{ n: string }>('SELECT count(*) AS n FROM payments WHERE ($1::text IS NULL OR status = $1)', [q.status ?? null]))[0]!.n);
-  const totals = await db.query<{ currency_code: string; received: string }>(
-    `SELECT currency_code, sum(amount_minor - refunded_minor) AS received FROM payments WHERE status IN ('paid', 'refunded') GROUP BY currency_code ORDER BY currency_code`);
+  const totals = await db.query<{ currency_code: string; received: string; refunded: string }>(
+    `SELECT currency_code, sum(amount_minor - refunded_minor) AS received, sum(refunded_minor) AS refunded FROM payments WHERE status IN ('paid', 'refunded') GROUP BY currency_code ORDER BY currency_code`);
   return {
     payments: rows.map(toPayment),
     count,
     nextOffset: q.offset + rows.length < count ? q.offset + rows.length : null,
-    totals: totals.map((t) => ({ currency: t.currency_code.trim(), receivedMinor: Number(t.received) })),
+    // receivedMinor is what Quintara kept (less refunds); refundedMinor what went back.
+    totals: totals.map((t) => ({ currency: t.currency_code.trim(), receivedMinor: Number(t.received), refundedMinor: Number(t.refunded) })),
   };
 }
 

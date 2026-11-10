@@ -46,7 +46,7 @@ export interface StaffExperience extends Omit<Experience, 'startsAt' | 'capacity
 export type BillingPeriod = 'month' | 'year' | 'once' | 'none';
 export interface StaffTierDetail extends StaffTier { isActive: boolean; members: number }
 export interface TierInput { name: string; priceMinor: number; currency: string; billingPeriod: BillingPeriod; isActive?: boolean; residency?: Residency | null; termMonths?: number | null }
-export interface StaffPaymentsPage { payments: StaffPayment[]; count: number; nextOffset: number | null; totals: { currency: string; receivedMinor: number }[] }
+export interface StaffPaymentsPage { payments: StaffPayment[]; count: number; nextOffset: number | null; totals: { currency: string; receivedMinor: number; refundedMinor: number }[] }
 export interface StaffPayment { id: string; purpose: string; payer: string; description: string; amountMinor: number; refundedMinor: number; currency: string; status: 'pending' | 'paid' | 'failed' | 'refunded'; provider: string; failureReason: string | null; createdAt: string }
 export interface Guest { bookingId: string; memberId: string; memberNumber: string; fullName: string; seats: number; status: string; ticketCode: string; checkedInAt: string | null }
 export interface StaffConciergeRequest extends ConciergeRequest { memberName: string; memberNumber: string }
@@ -69,6 +69,7 @@ export interface StaffDashboard {
   };
   concierge: null | { openRequests: number; newRequests: number; openServiceRequests: number; partnerBookingsWaiting: number };
   maison: null | { toProcess: number; preparing: number; withCourier: number };
+  attention: { kind: 'application' | 'request' | 'booking'; title: string; detail: string; href: string }[];
   generatedAt: string;
 }
 

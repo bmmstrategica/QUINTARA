@@ -194,5 +194,7 @@ export function AdminGate({ children }: { children: ReactNode }) {
   );
 }
 
+/** An amount of money, zero included ("R 0"): for totals. fmtMoney is for prices, where zero means complimentary. */
+export const fmtAmount = (minor: number, currency: string) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: currency || 'ZAR', maximumFractionDigits: 0 }).format(minor / 100);
 export const fmtMoney = (minor: number, currency: string) => (minor ? new Intl.NumberFormat('en-ZA', { style: 'currency', currency, maximumFractionDigits: 0 }).format(minor / 100) : 'Complimentary');
 export const fmtDate = (iso: string, timeZone?: string) => new Intl.DateTimeFormat('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone }).format(new Date(iso));

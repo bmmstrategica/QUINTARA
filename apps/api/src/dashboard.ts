@@ -29,6 +29,8 @@ export interface Dashboard {
   };
   concierge: null | { openRequests: number; newRequests: number; openServiceRequests: number; partnerBookingsWaiting: number };
   maison: null | { toProcess: number; preparing: number; withCourier: number };
+  /** What is waiting on someone, for this person's role: applications, desk requests and bookings, oldest first. */
+  attention: { kind: 'application' | 'request' | 'booking'; title: string; detail: string; href: string }[];
   generatedAt: string;
 }
 
@@ -102,5 +104,28 @@ export async function getDashboard(db: Queryable, ctx: RequestContext): Promise<
     maison = { toProcess: paid!, preparing: preparing!, withCourier: dispatched! };
   }
 
-  return { market: { name: market?.name ?? '', currency: market?.currency_code.trim() ?? '' }, business, membership, experiences, concierge, maison, generatedAt: new Date().toISOString() };
+  // Needs attention: each kind only for the roles that act on it.
+  const attention: Dashboard['attention'] = [];
+  if (staffCan(roles, 'admin.applications.review')) {
+    for (const a of await db.query<{ name: string | null; status: string }>(
+      `SELECT data->>'fullName' AS name, status FROM membership_applications WHERE market_id = $1 AND status IN ('submitted', 'under_review', 'interview') ORDER BY submitted_at NULLS LAST, created_at LIMIT 6`, P)) {
+      attention.push({ kind: 'application', title: a.name || 'An applicant', detail: `Application, ${({ submitted: 'submitted', under_review: 'under review', interview: 'interview' } as Record<string, string>)[a.status] ?? a.status}`, href: '/applications' });
+    }
+  }
+  if (staffCan(roles, 'admin.concierge.manage')) {
+    for (const r of await db.query<{ id: string; subject: string; name: string; status: string }>(
+      `SELECT r.id, r.subject, p.full_name AS name, r.status FROM concierge_requests r JOIN members m ON m.id = r.member_id JOIN profiles p ON p.user_id = m.user_id
+        WHERE r.market_id = $1 AND r.status IN ('requested', 'reviewing') ORDER BY r.created_at LIMIT 6`, P)) {
+      attention.push({ kind: 'request', title: r.subject, detail: `${r.name}. ${r.status === 'requested' ? 'Requested' : 'Reviewing'}`, href: `/concierge/${r.id}` });
+    }
+  }
+  if (staffCan(roles, 'admin.bookings.manage')) {
+    for (const b of await db.query<{ experience_id: string; title: string; name: string; status: string }>(
+      `SELECT e.id AS experience_id, e.title, p.full_name AS name, b.status FROM experience_bookings b JOIN experiences e ON e.id = b.experience_id
+         JOIN members m ON m.id = b.member_id JOIN profiles p ON p.user_id = m.user_id
+        WHERE e.market_id = $1 AND e.starts_at > now() AND b.status IN ('applied', 'waitlisted') ORDER BY b.created_at LIMIT 6`, P)) {
+      attention.push({ kind: 'booking', title: b.title, detail: `${b.name}, ${b.status === 'applied' ? 'applied' : 'on the waiting list'}`, href: `/experiences/${b.experience_id}` });
+    }
+  }
+  return { market: { name: market?.name ?? '', currency: market?.currency_code.trim() ?? '' }, business, membership, experiences, concierge, maison, attention, generatedAt: new Date().toISOString() };
 }
