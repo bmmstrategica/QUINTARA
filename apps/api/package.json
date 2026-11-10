@@ -11,7 +11,8 @@
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "first-run": "node --experimental-strip-types src/setup-cli.ts",
     "load": "node --experimental-strip-types scripts/load.ts",
-    "media:to-objects": "node --experimental-strip-types src/media-cli.ts"
+    "media:to-objects": "node --experimental-strip-types src/media-cli.ts",
+    "app-role": "node --experimental-strip-types src/app-role-cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",

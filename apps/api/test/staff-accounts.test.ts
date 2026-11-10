@@ -156,16 +156,17 @@ test('audit log: every action and request by each member of staff, append-only, 
     assert.ok((await admin('GET', '/admin/v1/audit')).body.entries.some((e: any) => e.action === 'audit.exported'));
 
     // Append-only, and the chain shows any tampering done behind the database's back.
-    await assert.rejects(s.db.query("UPDATE staff_activity SET route = 'nothing'"), /append-only/);
-    await assert.rejects(s.db.query('DELETE FROM staff_activity'), /append-only/);
-    await assert.rejects(s.db.query("UPDATE audit_logs SET action = 'tampered'"), /append-only/);
+    await assert.rejects(s.db.query("UPDATE staff_activity SET route = 'nothing'"), /append-only|permission denied/);
+    await assert.rejects(s.db.query('DELETE FROM staff_activity'), /append-only|permission denied/);
+    await assert.rejects(s.db.query("UPDATE audit_logs SET action = 'tampered'"), /append-only|permission denied/);
     const intact = await admin('POST', '/admin/v1/audit/verify');
     assert.deepEqual([intact.body.actions.intact, intact.body.requests.intact], [true, true]);
     assert.ok(intact.body.actions.entries > 5 && intact.body.requests.entries > 3);
     const victim = (await s.db.query<{ seq: string }>("SELECT seq FROM audit_logs WHERE action = 'staff.added'"))[0]!.seq;
-    await s.db.query('ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_append_only');
-    await s.db.query("UPDATE audit_logs SET changes = '{\"fullName\":\"Someone else\"}' WHERE seq = $1", [victim]);
-    await s.db.query('ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_append_only');
+    // Someone with the owner's access (not the API's) disables the protection and edits an entry.
+    await s.ownerDb.query('ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_append_only');
+    await s.ownerDb.query("UPDATE audit_logs SET changes = '{\"fullName\":\"Someone else\"}' WHERE seq = $1", [victim]);
+    await s.ownerDb.query('ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_append_only');
     const broken = await admin('POST', '/admin/v1/audit/verify');
     assert.deepEqual([broken.body.actions.intact, broken.body.actions.firstBrokenAt, broken.body.requests.intact], [false, Number(victim), true]);
   } finally { await s.close(); }

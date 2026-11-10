@@ -8,13 +8,16 @@ import { migrate } from '../src/migrate.ts';
 import { MockEmailProvider } from '../src/email.ts';
 import { MockPaymentProvider } from '../src/payments.ts';
 import { seed } from '../src/seed.ts';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
+import { grantAppRole } from '../src/app-role.ts';
 import { MockWhatsAppProvider } from '../src/whatsapp.ts';
 import type { WhatsAppConfig } from '../src/whatsapp.ts';
 
 export interface TestServer {
   app: FastifyInstance;
   db: Db;
+  /** The connection that owns the tables: the same as `db`, except when the API runs as the restricted role. */
+  ownerDb: Db;
   payments: MockPaymentProvider;
   email: MockEmailProvider;
   /** A signed-in staff browser: call(method, url, body) returns { status, body }. */
@@ -30,13 +33,19 @@ export interface TestServer {
 }
 
 /** A real API on an in-memory PostgreSQL, called through the same HTTP client the apps use. */
-export async function startServer(overrides: Partial<import('../src/app.ts').AppConfig> = {}, options: { db?: Db } = {}): Promise<TestServer> {
+export async function startServer(overrides: Partial<import('../src/app.ts').AppConfig> = {}, options: { db?: Db; prepared?: boolean } = {}): Promise<TestServer> {
   // An in-memory PostgreSQL by default; a real one when the test passes it (see freshPostgres), or for every test when
   // TEST_ALL_ON_POSTGRES=1 (with TEST_DATABASE_URL), so the whole suite can be run on a real server.
   const own = !options.db && process.env.TEST_ALL_ON_POSTGRES === '1' ? await freshPostgres() : null;
-  const db = options.db ?? own?.db ?? createMemoryDb();
-  await migrate(db);
-  await seed(db);
+  let db = options.db ?? own?.db ?? createMemoryDb();
+  // A database already migrated and seeded (by its owner) is used as it is.
+  if (!options.prepared) {
+    await migrate(db);
+    await seed(db);
+  }
+  // TEST_AS_APP_ROLE=1 (with TEST_ALL_ON_POSTGRES): the owner sets up the database, the API then connects as the
+  // restricted role production uses (app-role.ts), so every test shows the role has what the API needs.
+  if (own && process.env.TEST_AS_APP_ROLE === '1') db = await own.asAppRole();
   const payments = new MockPaymentProvider();
   const email = new MockEmailProvider();
   const whatsapp = new MockWhatsAppProvider();
@@ -76,14 +85,14 @@ export async function startServer(overrides: Partial<import('../src/app.ts').App
     }) as typeof fetch;
     return createHttpApi({ baseUrl: 'http://api.test', fetchImpl });
   };
-  return { app, db, payments, email, staff, client, whatsapp, whatsappConfig, whatsappIn, close: async () => { await app.flushEmails(); await app.close(); await db.close(); await own?.drop(); } };
+  return { app, db, ownerDb: own?.db ?? db, payments, email, staff, client, whatsapp, whatsappConfig, whatsappIn, close: async () => { await app.flushEmails(); await app.close(); await db.close(); if (own && own.db !== db) await own.db.close(); await own?.drop(); } };
 }
 
 /**
  * A new, empty database on the PostgreSQL server at TEST_DATABASE_URL, for tests that need real concurrency (the
  * in-memory database has a single connection). Returns null when TEST_DATABASE_URL is not set. `drop` removes it.
  */
-export async function freshPostgres(): Promise<{ db: Db; drop: () => Promise<void> } | null> {
+export async function freshPostgres(): Promise<{ db: Db; asAppRole: () => Promise<Db>; drop: () => Promise<void> } | null> {
   const base = process.env.TEST_DATABASE_URL;
   if (!base) return null;
   const name = `quintara_test_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -91,5 +100,22 @@ export async function freshPostgres(): Promise<{ db: Db; drop: () => Promise<voi
   await admin.exec(`CREATE DATABASE ${name}`);
   const url = new URL(base); url.pathname = `/${name}`;
   const db = createPostgresDb(url.toString());
-  return { db, drop: async () => { await admin.exec(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`); await admin.close(); } };
+  let appRole: { role: string; db: Db } | null = null;
+  return {
+    db,
+    /** Grants the restricted role on this database and returns a connection as it. */
+    asAppRole: async () => {
+      const role = `qapp_${name.slice(-14)}`, password = `pw-${randomUUID()}-${randomUUID()}`;
+      await grantAppRole(db, role, password);
+      const roleUrl = new URL(url); roleUrl.username = role; roleUrl.password = password;
+      appRole = { role, db: createPostgresDb(roleUrl.toString()) };
+      return appRole.db;
+    },
+    drop: async () => {
+      if (appRole) await appRole.db.close().catch(() => undefined);
+      await admin.exec(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+      if (appRole) await admin.exec(`DROP ROLE IF EXISTS ${appRole.role}`);
+      await admin.close();
+    },
+  };
 }

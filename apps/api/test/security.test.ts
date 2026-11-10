@@ -80,8 +80,9 @@ test('a suspended member loses access at once', async () => {
 test('bookings are written to the audit log, which cannot be edited', async () => {
   const rows = await server.db.query<{ action: string }>(`SELECT action FROM audit_logs WHERE action = 'booking.created'`);
   assert.ok(rows.length >= 4);
-  await assert.rejects(server.db.query(`UPDATE audit_logs SET action = 'tampered'`), /append-only/);
-  await assert.rejects(server.db.query('DELETE FROM audit_logs'), /append-only/);
+  // Refused by the append-only trigger, and (as the restricted production role) by permission before it.
+  await assert.rejects(server.db.query(`UPDATE audit_logs SET action = 'tampered'`), /append-only|permission denied/);
+  await assert.rejects(server.db.query('DELETE FROM audit_logs'), /append-only|permission denied/);
 });
 
 test('malformed input is refused without a server error', async () => {
