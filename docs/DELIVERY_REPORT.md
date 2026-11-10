@@ -100,7 +100,7 @@ passed on the final code.
 
 ## 4. Quality assurance
 
-**Executed on the final code of stage 5 (10 November 2026):**
+**Executed on the final code of stage 5 (10 November 2026).** The latest results, after Phases 2 to 6, are in section 4g.
 
 | Suite | Result |
 |---|---|
@@ -195,7 +195,7 @@ provider-specific step.
   image's registry was not reachable from this environment. moto is an emulator, so check the first real bucket in
   staging. The retention period (2,555 days by default) is for legal confirmation.
 
-## 4f. Phase 2 completed, Phase 3 under way
+## 4f. Phases 2 to 5: services, web app, console, integration
 
 Phase 2 (back-end services) closed four gaps found on a second audit against the brief:
 
@@ -274,6 +274,59 @@ Evidence at this point:
 - The retention test also passed on PostgreSQL 16 as the restricted role.
 - e2e: 30 tests, all passing. These include the eight role crawls, the two web crawls and the new journeys.
 - Visual regression: 8 of 8 passing.
+
+## 4g. Phase 6: testing
+
+**Executed on the final code of Phase 6 (10 November 2026):**
+
+| Suite | Result |
+|---|---|
+| Type-check, 9 workspaces | passed |
+| API tests, in memory | **219 tests: 208 passed, 0 failed**, 11 skipped (those need PostgreSQL, Redis or S3) |
+| The same suite on **PostgreSQL 16 as the restricted app role, with Redis 7 and an S3 server** (as CI runs it) | **219 passed, 0 failed, 0 skipped** |
+| API coverage (in memory) | 97.4% of lines, 82% of branches. The rest is mostly start-up code (`server.ts`) and the PostgreSQL and S3 code that the run above covers |
+| End-to-end browser tests on the development servers | **30 passed** |
+| The same 30 against **production builds** (`next build`, `next start`) of the web app, console and shop | **30 passed** |
+| Visual regression, web app (40 screens) | 8 of 8 passing, unchanged |
+| Accessibility (axe, WCAG 2.1 A and AA), web, console, shop, both themes | no serious or critical violations |
+| Load: 50 members at once for 30 s, on PostgreSQL 16 | 509 requests/s, p95 178 ms (limit 500), 0 server errors |
+| Production builds: web, console, shop; mobile iOS bundle | succeeded |
+| `pnpm audit --prod` | none in the API, web app, console or shop. 7 in Expo's command-line tools (mobile builds only), down from 19; see below |
+
+**How the gaps were found.**
+- *Coverage.* Measuring coverage showed which code no test ran. Where money, accounts or security were at stake, a
+  test was written for each path:
+  - the renewals desk, and retrying a member's card;
+  - a membership fee or an order paid after it was withdrawn or cancelled;
+  - an unpaid order released after its hold;
+  - a refund the provider refuses;
+  - declining a booking, and offering a seat from the waiting list;
+  - reinstating a closed account, and the scheduled erasure;
+  - moving two-factor to a new phone, new recovery codes, and turning two-factor off.
+
+  All of these passed as written: none of these paths was broken.
+- *Production builds.* Running the e2e suite against production builds found a real deployment defect. A web app or
+  shop built without `NEXT_PUBLIC_API_URL` ran on its offline demo data, looking as if it worked; the console
+  called localhost. A production build now stops with an error until the address is set.
+
+**Dependencies.** All 19 advisories were in Expo's command-line tools, which run only when the mobile app is built,
+not in anything deployed.
+- *Fixed:* twelve came from `node-forge` 1.4.0, now pinned to 1.4.1 or later (same minor version).
+- *Left:* seven (uuid, zod 3, glob, minimatch, decode-uri-component, deepmerge) need major upgrades inside Expo's own
+  dependencies, which could break the mobile build. They wait for Expo's next release.
+
+**Not done, stated plainly.**
+- *Real outside services:* email, WhatsApp, push, Claude, calendars and S3 were tested against stand-ins of their
+  APIs, not the services themselves. DEPLOYMENT.md lists a one-time check for each in staging.
+- *Payments:* tested with the test checkout only, until a provider is chosen.
+- *Mobile app:* typechecked and bundled, not run on a device or simulator.
+- *Visual regression:* covers the web app only. The console and shop show live, dated data; they would need frozen
+  data to compare screenshots reliably.
+- *CI:* the e2e job still runs against development servers. Running it against production builds as well, as here,
+  would have caught the missing-address defect; it is a recommended addition.
+- *Load:* measured on one machine shared with the database and the load generator; production figures depend on the
+  host.
+- *Camera scanning at check-in:* as before, not automatable here.
 
 ## 5. Security assessment
 
