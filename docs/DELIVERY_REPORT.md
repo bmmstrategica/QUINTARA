@@ -214,7 +214,7 @@ Phase 3 (web app completion) so far:
   uncaught errors, console errors, server errors, error pages and links to missing pages. Both runs pass.
 
 Evidence at this point:
-- API: 205 tests, 0 failing, 11 skipped; the skipped tests need PostgreSQL, Redis or S3 and run in CI.
+- API: 203 tests, 192 passing, 0 failing, 11 skipped; the skipped tests need PostgreSQL, Redis or S3 and run in CI.
 - The retention test also passed on PostgreSQL 16 as the restricted role.
 - e2e: 18 tests, all passing.
 
