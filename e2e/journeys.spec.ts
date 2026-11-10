@@ -203,3 +203,31 @@ test('a message appears for the other member without reloading, with an unread d
   await thandi.getByRole('button', { name: /^Send/ }).click();
   await expect(aisha.getByText(reply)).toBeVisible({ timeout: 15_000 });
 });
+
+test('staff cancel a booking from the guest list; the member sees it cancelled, with the reason', async ({ browser }) => {
+  const member = await browser.newPage();
+  member.on('dialog', (dialog) => void dialog.accept());
+  await webSignIn(member, 'chloe@example.com');
+  await member.goto(`${WEB}/experiences`);
+  await member.locator('article.item-row').filter({ hasText: 'The Executive Yacht Club' }).getByRole('link', { name: 'View details' }).click();
+  const book = member.getByRole('button', { name: /^(RSVP|Reserve)$/ });
+  await book.click();
+  await expect(book).toHaveCount(0);
+
+  const admin = await browser.newPage();
+  admin.on('dialog', (dialog) => void dialog.accept());
+  await adminSignIn(admin, 'admin@example.com');
+  await admin.goto(`${ADMIN}/experiences`);
+  await admin.getByRole('row', { name: /The Executive Yacht Club/ }).getByRole('link', { name: 'Open' }).click();
+  await admin.getByRole('row', { name: /Chloe van der Merwe/ }).getByRole('button', { name: 'Cancel' }).click();
+  await admin.getByLabel('Reason, as the guest will read it').fill('The yacht is in for repairs.');
+  await admin.getByLabel('Refund').selectOption('none');        // nothing was paid for this one
+  await admin.getByRole('button', { name: 'Cancel booking' }).click();
+  // The guest list shows live bookings only, so the cancelled one leaves it.
+  await expect(admin.getByRole('row', { name: /Chloe van der Merwe/ })).toHaveCount(0);
+
+  await member.goto(`${WEB}/notifications`);
+  await expect(member.getByText(/cancelled by Quintara\. The yacht is in for repairs\./).first()).toBeVisible();
+  await member.goto(`${WEB}/bookings`);
+  await expect(member.locator('article.item-row').filter({ hasText: 'The Executive Yacht Club' }).getByText(/cancelled/i).first()).toBeVisible();
+});

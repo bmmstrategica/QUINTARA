@@ -182,6 +182,10 @@ export interface AdminApi {
   inviteMember(experienceId: string, memberId: string): Promise<void>;
   listGuests(experienceId: string): Promise<Guest[]>;
   decideBooking(bookingId: string, decision: 'confirm' | 'decline'): Promise<void>;
+  /** Cancels a member's booking with a reason; a refund (full, part, none) needs the finance permission. */
+  cancelBooking(bookingId: string, input: { reason: string; refund: 'full' | 'partial' | 'none'; amountMinor?: number }): Promise<{ bookingId: string; status: 'cancelled'; refundedMinor: number; refundFailed: boolean }>;
+  /** Cancels a whole experience: every booking cancelled and every payment refunded in full, each guest told why. */
+  cancelExperience(experienceId: string, reason: string): Promise<{ experienceId: string; bookingsCancelled: number; refunds: number; refundedMinor: number; currency: string; refundsFailed: number }>;
   checkIn(ticketCode: string): Promise<{ fullName: string; seats: number; experienceTitle: string }>;
   listBusinessListings(): Promise<BusinessListing[]>;
   reviewListing(id: string, decision: 'publish' | 'decline' | 'close', note?: string): Promise<void>;
@@ -318,6 +322,8 @@ export function createAdminApi(options: HttpApiOptions): AdminApi {
     inviteMember: (experienceId, memberId) => request('POST', `/admin/v1/experiences/${id(experienceId)}/invitations`, { memberId }),
     listGuests: (experienceId) => request('GET', `/admin/v1/experiences/${id(experienceId)}/guests`),
     decideBooking: (bookingId, decision) => request('POST', `/admin/v1/bookings/${id(bookingId)}/decision`, { decision }),
+    cancelBooking: (bookingId, input) => request('POST', `/admin/v1/bookings/${id(bookingId)}/cancel`, input),
+    cancelExperience: (experienceId, reason) => request('POST', `/admin/v1/experiences/${id(experienceId)}/cancel`, { reason }),
     checkIn: (ticketCode) => request('POST', '/admin/v1/check-in', { ticketCode }),
     listBusinessListings: () => request('GET', '/admin/v1/business/listings'),
     reviewListing: (listingId, decision, note) => request('POST', `/admin/v1/business/listings/${id(listingId)}/review`, { decision, note }),

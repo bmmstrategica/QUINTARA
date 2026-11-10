@@ -38,6 +38,7 @@ import { MemoryRateLimiter } from './ratelimit.ts';
 import type { ObjectStore } from './objects.ts';
 import type { RateLimiter } from './ratelimit.ts';
 import * as checkout from './checkout.ts';
+import * as cancellations from './cancellations.ts';
 import { TestCheckoutProvider } from './payments.ts';
 import * as partners from './partners.ts';
 import { deliverEmails } from './email.ts';
@@ -703,6 +704,9 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   app.patch<Id>('/admin/v1/experiences/:id', (request) => admin.updateExperience(db, request.ctx, request.params.id, request.body));
   app.post<Id>('/admin/v1/experiences/:id/invitations', (request, reply) => done(admin.inviteMember(db, request.ctx, request.params.id, request.body), reply));
   app.get<Id>('/admin/v1/experiences/:id/guests', (request) => admin.listGuests(db, request.ctx, request.params.id));
+  // Cancellations decided by Quintara: one booking (with a refund chosen by finance), or a whole experience (all refunded).
+  app.post<Id>('/admin/v1/bookings/:id/cancel', (request) => cancellations.cancelBookingForStaff(db, request.ctx, config.payments, request.params.id, request.body));
+  app.post<Id>('/admin/v1/experiences/:id/cancel', (request) => cancellations.cancelExperience(db, request.ctx, config.payments, request.params.id, request.body));
   app.post<Id>('/admin/v1/bookings/:id/decision', (request, reply) => done(admin.decideBooking(db, request.ctx, request.params.id, request.body), reply));
   app.post('/admin/v1/check-in', (request) => admin.checkIn(db, request.ctx, request.body));
   app.get('/admin/v1/business/listings', (request) => business.listListingsForStaff(db, request.ctx));

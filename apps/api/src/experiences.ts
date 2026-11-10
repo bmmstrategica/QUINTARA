@@ -236,20 +236,31 @@ export async function payBooking(db: Db, ctx: RequestContext, provider: PaymentP
   return toBooking((await db.query(`${SELECT_BOOKING} WHERE b.id = $1`, [bookingId]))[0]!);
 }
 
-/** Returns a paid payment in full. Safe to repeat: the provider de-duplicates on the key. */
-export async function refundPayment(db: Db, provider: PaymentProvider, actorUserId: string, paymentId: string): Promise<void> {
-  const rows = await db.query<{ provider_payment_id: string | null; amount_minor: string; currency_code: string; status: string }>('SELECT provider_payment_id, amount_minor, currency_code, status FROM payments WHERE id = $1', [paymentId]);
-  const payment = rows[0];
-  if (!payment || payment.status !== 'paid' || !payment.provider_payment_id) return;
-  const result = await provider.refund({ providerPaymentId: payment.provider_payment_id, amountMinor: Number(payment.amount_minor), currency: payment.currency_code.trim(), idempotencyKey: `refund:${paymentId}` });
+/**
+ * Refunds a paid payment: in full, or `amountMinor` of what is left. The person who paid is told; `actorUserId` (the
+ * member, or the member of staff who decided it) is recorded in the audit log. Safe to repeat: each refund has its own
+ * idempotency key, built from the amount already refunded, so a retried request is not refunded twice by the provider.
+ * Returns the amount refunded (0 if nothing could be).
+ */
+export async function refundPayment(db: Db, provider: PaymentProvider, actorUserId: string, paymentId: string, amountMinor?: number): Promise<number> {
+  const payment = (await db.query<{ user_id: string; provider_payment_id: string | null; amount_minor: string; refunded_minor: string; currency_code: string; status: string }>(
+    'SELECT user_id, provider_payment_id, amount_minor, refunded_minor, currency_code, status FROM payments WHERE id = $1', [paymentId]))[0];
+  if (!payment || payment.status !== 'paid' || !payment.provider_payment_id) return 0;
+  const left = Number(payment.amount_minor) - Number(payment.refunded_minor);
+  const amount = Math.min(left, amountMinor ?? left);
+  if (amount <= 0) return 0;
+  const currency = payment.currency_code.trim();
+  const result = await provider.refund({ providerPaymentId: payment.provider_payment_id, amountMinor: amount, currency, idempotencyKey: amount === Number(payment.amount_minor) ? `refund:${paymentId}` : `refund:${paymentId}:${payment.refunded_minor}:${amount}` });
   if (result.status === 'failed') {
-    // The booking stays cancelled; staff see this entry and settle the refund by hand.
-    await audit(db, actorUserId, 'refund.failed', 'payment', paymentId, { reason: result.reason });
-    return;
+    // The cancellation stands; staff see this entry and settle the refund by hand.
+    await audit(db, actorUserId, 'refund.failed', 'payment', paymentId, { reason: result.reason, amountMinor: amount });
+    return 0;
   }
-  await db.query(`UPDATE payments SET status = 'refunded', refunded_minor = amount_minor, refunded_at = now(), provider_refund_id = $2, updated_at = now() WHERE id = $1`, [paymentId, result.providerRefundId]);
-  await db.query(`INSERT INTO notifications (user_id, category, title) VALUES ($1, 'booking_confirmation', $2)`, [actorUserId, `We have refunded ${formatMoney(Number(payment.amount_minor), payment.currency_code.trim())} to your original payment method.`]);
-  await audit(db, actorUserId, 'payment.refunded', 'payment', paymentId, { amountMinor: Number(payment.amount_minor) });
+  const full = amount === left;
+  await db.query(`UPDATE payments SET status = CASE WHEN $3 THEN 'refunded' ELSE status END, refunded_minor = refunded_minor + $4, refunded_at = now(), provider_refund_id = $2, updated_at = now() WHERE id = $1`, [paymentId, result.providerRefundId, full, amount]);
+  await db.query(`INSERT INTO notifications (user_id, category, title) VALUES ($1, 'booking_confirmation', $2)`, [payment.user_id, `We have refunded ${formatMoney(amount, currency)} to your original payment method.`]);
+  await audit(db, actorUserId, 'payment.refunded', 'payment', paymentId, { amountMinor: amount, partial: !full });
+  return amount;
 }
 
 export async function cancelBooking(db: Db, ctx: RequestContext, provider: PaymentProvider, bookingId: string): Promise<Booking> {

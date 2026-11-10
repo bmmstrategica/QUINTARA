@@ -144,6 +144,7 @@ async function staffExperience(db: Queryable, id: string): Promise<StaffExperien
 export async function createExperience(db: Db, ctx: RequestContext, marketId: string, body: unknown): Promise<StaffExperience> {
   const staffId = requireStaff(ctx, 'admin.experiences.manage');
   const data = parse(experienceSchema, body) as Record<string, unknown>;
+  if (data.status === 'cancelled') throw conflict('A new experience starts as a draft or published.');
   if (!(await db.query('SELECT 1 FROM currencies WHERE code = $1', [data.currency]))[0]) throw new HttpError(422, 'Choose a supported currency.', { currency: 'Unsupported currency' });
   const keys = Object.keys(COLUMNS).filter((key) => data[key] !== undefined);
   const id = (await db.query<{ id: string }>(
@@ -158,7 +159,10 @@ export async function updateExperience(db: Db, ctx: RequestContext, id: string, 
   const data = parse(experienceSchema.partial(), body) as Record<string, unknown>;
   // Only the keys the caller actually sent: defaults must not overwrite stored values.
   const sent = Object.keys(COLUMNS).filter((key) => key in ((body ?? {}) as object) && data[key] !== undefined);
-  await staffExperience(db, id);
+  // Cancelling has consequences (guests told, payments refunded): it has its own action, never a plain edit.
+  if (data.status === 'cancelled') throw conflict('Use Cancel experience: it tells the guests and refunds what they paid.');
+  const current = await staffExperience(db, id);
+  if (current.status === 'cancelled' && sent.includes('status')) throw conflict('A cancelled experience cannot be published again. Create a new one.');
   if (sent.length) {
     await db.query(`UPDATE experiences SET ${sent.map((k, i) => `${COLUMNS[k]} = $${i + 2}`).join(', ')}, updated_at = now() WHERE id = $1`, [id, ...sent.map((k) => data[k])]);
     await audit(db, staffId, 'experience.updated', 'experience', id, { fields: sent });
