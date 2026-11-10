@@ -16,6 +16,8 @@ import { ClaudeQeraModel, DEFAULT_QERA_MODEL, withFallback } from './qera-claude
 import { localNow } from './time.ts';
 import { createClient as createRedisClient } from 'redis';
 import { RedisRateLimiter } from './ratelimit.ts';
+import { mediaObjectStore } from './objects-config.ts';
+import { purgeDeletedMedia } from './media.ts';
 import type { RateLimiter } from './ratelimit.ts';
 import { dispatchPush, ExpoPushProvider, MockPushProvider } from './push.ts';
 import type { PushProvider } from './push.ts';
@@ -137,8 +139,15 @@ if (env0('REDIS_URL')) {
   console.warn('Rate limits: counted in this process. Set REDIS_URL before running more than one API process.');
 }
 
+// Photographs in an S3-compatible bucket when MEDIA_S3_BUCKET is set; otherwise in the database (fine to start with,
+// heavy once the library grows). Moving existing photographs: pnpm --filter @quintara/api run media:to-objects
+const objects = mediaObjectStore(env0) ?? undefined;
+if (objects) console.log('Photographs: in object storage.');
+else if (production) console.warn('Photographs: in the database. Set MEDIA_S3_BUCKET to keep them in object storage.');
+
 const app = await buildApp(db, {
   rateLimiter,
+  objects,
   qeraModel,
   signInLimit,
   webOrigins: (process.env.WEB_ORIGINS ?? 'http://localhost:3000,http://localhost:3001,http://localhost:3002').split(',').map((origin) => origin.trim()),
@@ -169,6 +178,8 @@ await app.listen({ port: Number(process.env.PORT ?? 4000), host: process.env.HOS
 const housekeeping = setInterval(() => {
   void deliverEmails(db, email, webUrl).then(() => deliverPartnerBookings(db, email, webUrl)).catch((error) => app.log.error(error));
   void eraseDueAccounts(db).then((n) => { if (n) app.log.info(`Erased ${n} closed account(s).`); }).catch((error) => app.log.error(error));
+  // Files of deleted photographs (replaced pictures, erased accounts) are removed from the bucket too.
+  if (objects) void purgeDeletedMedia(db, objects).then((n) => { if (n) app.log.info(`Removed the files of ${n} deleted photograph(s).`); }).catch((error) => app.log.error(error));
   // QÉRA as Chief of Staff: due reminders, the Monday brief, dates coming up and tomorrow's bookings.
   void runChiefOfStaff(db).catch((error) => app.log.error(error));
   // Members' calendars, read again every half hour for the daily brief.

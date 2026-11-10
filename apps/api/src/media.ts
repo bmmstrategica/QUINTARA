@@ -17,7 +17,9 @@ import sharp from 'sharp';
 import { z } from 'zod';
 import { audit, requireMember, requireStaffAny } from './context.ts';
 import type { RequestContext } from './context.ts';
-import type { Queryable } from './db.ts';
+import { randomUUID } from 'node:crypto';
+import type { Db, Queryable } from './db.ts';
+import type { ObjectStore } from './objects.ts';
 import { HttpError, notFound, validation } from './errors.ts';
 
 /** The largest file staff can upload: a full-resolution camera or phone original. */
@@ -73,6 +75,76 @@ export function createDbMediaStore(db: Queryable): MediaStore {
       return row ? { contentType: row.content_type, bytes: Buffer.from(row.data_base64, 'base64') } : null;
     },
   };
+}
+
+const extension = (contentType: string) => ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' } as Record<string, string>)[contentType] ?? 'bin';
+/** Where a photograph's files live in the bucket: `media/<id>/master` and `media/<id>/<width>.<ext>` for its copies. */
+export const objectKeys = { master: (id: string) => `media/${id}/master`, variant: (id: string, width: number, contentType: string) => `media/${id}/${width}.${extension(contentType)}`, prefix: (id: string) => `media/${id}/` };
+
+/**
+ * Photographs in object storage: the files go to the bucket, the database keeps their details. Photographs stored in
+ * the database before (data_base64 set) are still served from there, so the move can happen at any pace.
+ */
+export function createObjectMediaStore(db: Db, objects: ObjectStore): MediaStore {
+  return {
+    async put({ master, variants }, uploadedBy) {
+      const id = randomUUID();
+      // Files first, then the rows: a row never points at a file that is not there.
+      await Promise.all([
+        objects.put(objectKeys.master(id), master.bytes, master.contentType),
+        ...variants.map((v) => objects.put(objectKeys.variant(id, v.width, v.contentType), v.bytes, v.contentType)),
+      ]);
+      await db.tx(async (tx) => {
+        await tx.query('INSERT INTO media (id, content_type, byte_size, data_base64, uploaded_by, width, height) VALUES ($1, $2, $3, NULL, $4, $5, $6)',
+          [id, master.contentType, master.bytes.length, uploadedBy, master.width, master.height]);
+        for (const v of variants) {
+          await tx.query('INSERT INTO media_variants (media_id, width, height, content_type, byte_size, data_base64) VALUES ($1, $2, $3, $4, $5, NULL)', [id, v.width, v.height, v.contentType, v.bytes.length]);
+        }
+      });
+      return id;
+    },
+    async get(id, want) {
+      if (!UUID.test(id)) return null;
+      const fetch = async (row: { content_type: string; data_base64: string | null }, key: string) => {
+        const bytes = row.data_base64 !== null ? Buffer.from(row.data_base64, 'base64') : await objects.get(key);
+        return bytes ? { contentType: row.content_type, bytes } : null;
+      };
+      if (want?.webp) {
+        const rows = await db.query<{ content_type: string; data_base64: string | null; width: number }>(
+          `SELECT content_type, data_base64, width FROM media_variants WHERE media_id = $1 AND content_type = 'image/webp'
+            ORDER BY ${want.width ? '(width < $2), CASE WHEN width >= $2 THEN width ELSE -width END' : 'width DESC'} LIMIT 1`, want.width ? [id, want.width] : [id]);
+        if (rows[0]) { const found = await fetch(rows[0], objectKeys.variant(id, rows[0].width, rows[0].content_type)); if (found) return found; }
+      }
+      const row = (await db.query<{ content_type: string; data_base64: string | null }>('SELECT content_type, data_base64 FROM media WHERE id = $1', [id]))[0];
+      return row ? fetch(row, objectKeys.master(id)) : null;
+    },
+  };
+}
+
+/** Removes from the bucket the files of photographs deleted from the database (queued by a trigger). */
+export async function purgeDeletedMedia(db: Queryable, objects: ObjectStore, batch = 100): Promise<number> {
+  const queued = await db.query<{ media_id: string }>('SELECT media_id FROM media_purge ORDER BY deleted_at LIMIT $1', [batch]);
+  for (const { media_id: id } of queued) {
+    await objects.deletePrefix(objectKeys.prefix(id));
+    await db.query('DELETE FROM media_purge WHERE media_id = $1', [id]);
+  }
+  return queued.length;
+}
+
+/** Moves photographs stored in the database to the bucket, a batch at a time. Safe to stop and run again. */
+export async function moveMediaToObjects(db: Db, objects: ObjectStore, batch = 20): Promise<number> {
+  const rows = await db.query<{ id: string; content_type: string; data_base64: string }>('SELECT id, content_type, data_base64 FROM media WHERE data_base64 IS NOT NULL ORDER BY created_at LIMIT $1', [batch]);
+  for (const m of rows) {
+    const variants = await db.query<{ width: number; content_type: string; data_base64: string | null }>('SELECT width, content_type, data_base64 FROM media_variants WHERE media_id = $1', [m.id]);
+    await objects.put(objectKeys.master(m.id), Buffer.from(m.data_base64, 'base64'), m.content_type);
+    for (const v of variants) if (v.data_base64 !== null) await objects.put(objectKeys.variant(m.id, v.width, v.content_type), Buffer.from(v.data_base64, 'base64'), v.content_type);
+    // Only once every file is in the bucket are the database copies cleared.
+    await db.tx(async (tx) => {
+      await tx.query('UPDATE media_variants SET data_base64 = NULL WHERE media_id = $1', [m.id]);
+      await tx.query('UPDATE media SET data_base64 = NULL WHERE id = $1', [m.id]);
+    });
+  }
+  return rows.length;
 }
 
 /** What the file actually is, judged from its first bytes rather than from what the uploader says. */

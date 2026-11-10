@@ -35,6 +35,7 @@ import * as renewals from './renewals.ts';
 import * as insights from './insights.ts';
 import { getDashboard } from './dashboard.ts';
 import { MemoryRateLimiter } from './ratelimit.ts';
+import type { ObjectStore } from './objects.ts';
 import type { RateLimiter } from './ratelimit.ts';
 import * as checkout from './checkout.ts';
 import { TestCheckoutProvider } from './payments.ts';
@@ -82,6 +83,8 @@ export interface AppConfig {
   /** Sign-in attempts allowed per address per minute. */
   /** Where rate limits are counted: in this process by default; Redis (RedisRateLimiter) when several API processes run. */
   rateLimiter?: RateLimiter;
+  /** Object storage for photographs (S3-compatible). Without it, photographs are kept in the database. */
+  objects?: ObjectStore;
   signInLimit?: number;
   /** The language model behind QÉRA. Defaults to the built-in rule-based stand-in. */
   qeraModel?: QeraModel;
@@ -422,7 +425,8 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   app.get('/v1/boutique/products', async (request) => boutique.listProducts(db, request.ctx, request.ctx.marketId));
   app.get('/v1/boutique/delivery-options', async (request) => boutique.listDeliveryOptions(db, request.ctx, request.ctx.marketId));
   // Photographs: an unguessable id, a fixed image type, and no sniffing or scripting by the browser.
-  const mediaStore = media.createDbMediaStore(db);
+  // Photographs: in the object store when one is configured (MEDIA_S3_*), otherwise in the database.
+  const mediaStore = config.objects ? media.createObjectMediaStore(db, config.objects) : media.createDbMediaStore(db);
   app.get<{ Params: { id: string }; Querystring: { w?: string } }>('/v1/media/:id', async (request, reply) => {
     // ?w= asks for the copy made for a screen that many pixels wide; browsers that take WebP get the sharper, lighter copy.
     const image = await media.readImage(mediaStore, request.params.id, request.query.w, request.headers.accept);

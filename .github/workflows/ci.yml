@@ -79,12 +79,20 @@ jobs:
         env:
           SETUP_ADMIN_EMAIL: ci-admin@example.com
           SETUP_ADMIN_NAME: CI Administrator
+      - name: An S3-compatible server for the object storage tests (moto)
+        run: |
+          pip install --quiet 'moto[server]'
+          moto_server -p 9100 > /tmp/moto.log 2>&1 &
+          for i in $(seq 1 30); do curl -s -o /dev/null http://localhost:9100 && break; sleep 1; done
       - name: Every API test on PostgreSQL, each server on a fresh database (races need real connections)
         run: pnpm --filter @quintara/api test
         env:
           TEST_DATABASE_URL: postgres://quintara:quintara@localhost:5432/postgres
           TEST_ALL_ON_POSTGRES: '1'
           TEST_REDIS_URL: redis://localhost:6379
+          TEST_S3_ENDPOINT: http://localhost:9100
+          TEST_S3_KEY: test
+          TEST_S3_SECRET: test
       - name: Load test (50 members at once for 20 seconds; fails on any error or p95 over 500 ms)
         run: pnpm --filter @quintara/api load
         env:
