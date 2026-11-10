@@ -4,7 +4,14 @@ import { useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createHttpApi, createMockApi } from '@quintara/api-client';
 import type { QuintaraApi } from '@quintara/api-client';
-import { QuintaraProvider } from '@quintara/app-core';
+import { QuintaraProvider, setVisibilitySource } from '@quintara/app-core';
+import { AppState } from 'react-native';
+
+// Live screens (messages, notifications) refresh only while the app is in the foreground.
+setVisibilitySource({
+  visible: () => AppState.currentState === 'active',
+  subscribe: (onChange) => { const subscription = AppState.addEventListener('change', (state) => onChange(state === 'active')); return () => subscription.remove(); },
+});
 import { CityButton, RestoreMarket, saveMarket } from '@/components/city-picker';
 import { SecondStepGate } from '@/components/two-factor';
 import { AppLock } from '@/components/app-lock';

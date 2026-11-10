@@ -242,22 +242,36 @@ export function useResource<T>(load: (api: QuintaraApi) => Promise<T>, deps: rea
   return { status: 'loading', data: undefined, error: undefined, reload, refresh };
 }
 
+/** Whether the person can see the app now, and a way to hear when that changes. */
+export interface VisibilitySource {
+  visible(): boolean;
+  subscribe(onChange: (visible: boolean) => void): () => void;
+}
+const documentVisibility: VisibilitySource = {
+  visible: () => document.visibilityState === 'visible',
+  subscribe: (onChange) => { const listener = () => onChange(document.visibilityState === 'visible'); document.addEventListener('visibilitychange', listener); return () => document.removeEventListener('visibilitychange', listener); },
+};
+let visibilitySource: VisibilitySource | null = null;
+/** The mobile app registers its own (the app in the foreground); web browsers use the page's visibility. */
+export function setVisibilitySource(source: VisibilitySource): void { visibilitySource = source; }
+const currentVisibility = (): VisibilitySource | null => visibilitySource ?? (typeof document !== 'undefined' ? documentVisibility : null);
+
 /**
- * Keeps a screen up to date: calls `refresh` every `everyMs` while the page is visible, and at once when the person
- * comes back to it. Nothing is fetched while the tab or app is in the background.
+ * Keeps a screen up to date: calls `refresh` every `everyMs` while the app is visible (the page on the web, the app in
+ * the foreground on a phone), and at once when the person comes back to it. Nothing is fetched in the background.
  */
 export function useLive(refresh: () => void, everyMs: number, enabled = true): void {
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
   useEffect(() => {
-    if (!enabled || typeof document === 'undefined') return;
+    const source = currentVisibility();
+    if (!enabled || !source) return;
     let timer: ReturnType<typeof setInterval> | null = null;
     const start = () => { if (!timer) timer = setInterval(() => refreshRef.current(), everyMs); };
     const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
-    const onVisibility = () => { if (document.visibilityState === 'visible') { refreshRef.current(); start(); } else stop(); };
-    if (document.visibilityState === 'visible') start();
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility); };
+    if (source.visible()) start();
+    const unsubscribe = source.subscribe((visible) => { if (visible) { refreshRef.current(); start(); } else stop(); });
+    return () => { stop(); unsubscribe(); };
   }, [everyMs, enabled]);
 }
 

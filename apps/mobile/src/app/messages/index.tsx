@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useResource } from '@quintara/app-core';
+import { useLive, useResource } from '@quintara/app-core';
 import { clock, EmptyState, ResourceView, Row, Screen, Tag, Muted } from '@/components/ui';
 import { useSection } from '@/components/section-copy';
 
@@ -7,6 +7,7 @@ export default function MessagesScreen() {
   const messaging = useSection('messaging');
   const router = useRouter();
   const conversations = useResource((api) => api.listConversations());
+  useLive(conversations.refresh, 15000);
   return (
     <Screen onRefresh={conversations.reload} refreshing={conversations.status === 'loading'}>
       <Muted>{messaging.description}</Muted>

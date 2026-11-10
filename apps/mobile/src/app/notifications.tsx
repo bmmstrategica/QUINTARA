@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useApi, useResource } from '@quintara/app-core';
+import { useApi, useLive, useResource } from '@quintara/app-core';
 import type { AppNotification } from '@quintara/domain';
 import { Button, clock, EmptyState, Muted, ResourceView, Row, Screen, Tag } from '@/components/ui';
 import { NOTIFICATION_ROUTE, usePush } from '@/components/push';
@@ -11,6 +11,7 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const api = useApi();
   const notifications = useResource((client) => client.listNotifications());
+  useLive(notifications.refresh, 30000);
   const intro = useSection('notifications');
   const push = usePush();
   const open = async (n: AppNotification) => {
