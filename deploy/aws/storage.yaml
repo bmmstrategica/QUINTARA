@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Quintara object storage for one environment (staging or production): a private bucket for photographs, and a
+  write-once bucket with S3 Object Lock for the daily audit log copies, plus an access key limited to them.
+  Deploy once per environment; see docs/DEPLOYMENT.md, "Object storage".
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [staging, production]
+    Description: Which environment these buckets serve. Each has its own buckets and its own key.
+  NamePrefix:
+    Type: String
+    Default: quintara
+    AllowedPattern: '^[a-z0-9][a-z0-9-]{1,30}$'
+    Description: The start of the bucket names. Bucket names are global, so add something unique if this is taken.
+
+Resources:
+  # Photographs: private, served only through the API. Versioned, so a replaced or deleted photograph can be
+  # recovered for 30 days; database backups do not contain the files.
+  MediaBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub '${NamePrefix}-${Environment}-media'
+      VersioningConfiguration: { Status: Enabled }
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+      OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerEnforced }] }
+      LifecycleConfiguration:
+        Rules:
+          - Id: forget-old-versions
+            Status: Enabled
+            NoncurrentVersionExpiration: { NoncurrentDays: 30 }
+            AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 }
+
+  # Audit log copies: Object Lock can only be turned on when a bucket is created. The API writes every copy in
+  # COMPLIANCE mode with its own retention date (AUDIT_RETENTION_DAYS), so nobody, the account's root user included,
+  # can change or delete a copy before that date. Deliberately no default retention here: the period is set by the API
+  # and awaits legal confirmation (docs/LAUNCH_CHECKLIST.md).
+  AuditBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub '${NamePrefix}-${Environment}-audit'
+      ObjectLockEnabled: true
+      VersioningConfiguration: { Status: Enabled }
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+      OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerEnforced }] }
+
+  # HTTPS only, for both buckets.
+  MediaBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MediaBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: HttpsOnly
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: [!GetAtt MediaBucket.Arn, !Sub '${MediaBucket.Arn}/*']
+            Condition: { Bool: { 'aws:SecureTransport': 'false' } }
+  AuditBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AuditBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: HttpsOnly
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: [!GetAtt AuditBucket.Arn, !Sub '${AuditBucket.Arn}/*']
+            Condition: { Bool: { 'aws:SecureTransport': 'false' } }
+
+  # The API's own identity: only what it does. Photographs: read, write, delete. Audit copies: write with a
+  # retention date and read back, never delete or shorten a retention.
+  ApiUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: !Sub '${NamePrefix}-${Environment}-api'
+      Policies:
+        - PolicyName: quintara-object-storage
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: Photographs
+                Effect: Allow
+                Action: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject']
+                Resource: !Sub '${MediaBucket.Arn}/*'
+              - Sid: AuditCopies
+                Effect: Allow
+                Action: ['s3:PutObject', 's3:PutObjectRetention', 's3:GetObject', 's3:GetObjectRetention']
+                Resource: !Sub '${AuditBucket.Arn}/*'
+              - Sid: ListBoth
+                Effect: Allow
+                Action: 's3:ListBucket'
+                Resource: [!GetAtt MediaBucket.Arn, !GetAtt AuditBucket.Arn]
+  ApiAccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref ApiUser
+
+  # The key's secret goes into Secrets Manager, not into the stack's outputs, where anyone who can read the stack
+  # would see it. Copy it from there into the API host's secrets and the GitHub environment.
+  ApiAccessKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${NamePrefix}/${Environment}/object-storage-key'
+      Description: The Quintara API's access key for its two buckets.
+      SecretString: !Sub '{"accessKeyId":"${ApiAccessKey}","secretAccessKey":"${ApiAccessKey.SecretAccessKey}"}'
+
+Outputs:
+  MediaBucket:
+    Description: MEDIA_S3_BUCKET
+    Value: !Ref MediaBucket
+  AuditBucket:
+    Description: AUDIT_S3_BUCKET
+    Value: !Ref AuditBucket
+  Region:
+    Description: MEDIA_S3_REGION and AUDIT_S3_REGION
+    Value: !Ref AWS::Region
+  AccessKeyId:
+    Description: MEDIA_S3_ACCESS_KEY_ID and AUDIT_S3_ACCESS_KEY_ID (the secret is in Secrets Manager)
+    Value: !Ref ApiAccessKey
+  KeySecretName:
+    Description: Where the secret access key is kept (Secrets Manager)
+    Value: !Ref ApiAccessKeySecret

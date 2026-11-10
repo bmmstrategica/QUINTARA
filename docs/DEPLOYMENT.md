@@ -78,8 +78,9 @@ These are public by design: they are addresses, not secrets.
 3. Create the API's restricted database role, as the owner:
    `DATABASE_URL=<owner> APP_ROLE=quintara_app APP_ROLE_PASSWORD=<24+ random characters> pnpm --filter @quintara/api run app-role`.
    The API's `DATABASE_URL` uses this role; the owner's connection is kept for migrations only.
-4. Create two buckets (Amazon S3, Cloudflare R2 or similar), both private: one for photographs (`MEDIA_S3_*`), and one
-   **created with Object Lock** for the audit log copies (`AUDIT_S3_*`). Give the API keys limited to those buckets.
+4. Create the two buckets with `deploy/aws/storage.yaml` (below, "Object storage and GitHub environments"): one for
+   photographs (`MEDIA_S3_*`), and one **with Object Lock** for the audit log copies (`AUDIT_S3_*`), with a key limited
+   to them. The audit copies need S3 Object Lock in compliance mode (Amazon S3, or a service that implements it).
    Upload a photograph in staging and check it is served, before going live.
 5. Build and start the API: `docker build -f apps/api/Dockerfile -t quintara-api .` then run it with the settings above.
    Point the host's health check at `/ready`.
@@ -109,6 +110,56 @@ A stand-in cannot prove the real service accepts the request, so with real keys 
 | Calendars | Connect a Google or Outlook private address. | Today's events appear in the daily brief within half an hour. |
 | Payments | After the provider is chosen: pay, decline and refund with its test cards. | As the e2e checkout journeys, with the provider's own pages. |
 | Photographs and audit copies (S3) | Upload a photograph; wait a day. | It is served; `audit:check-copies` reports the day's copy. |
+
+## Object storage and GitHub environments (one command each)
+
+Both are created under Quintara's own accounts, by someone signed in to them. They cannot be created from a
+development session.
+
+**The two buckets**, per environment. `deploy/aws/storage.yaml` creates:
+- a private, versioned bucket for photographs;
+- a bucket **with Object Lock** for the audit copies (Object Lock can only be turned on when a bucket is created);
+- an access key for the API, allowed only what it does. It can write audit copies with a retention date, but never
+  delete them or shorten a retention. The key's secret goes into Secrets Manager, not the stack's outputs.
+
+Both buckets are kept if the stack is ever deleted. Cape Town (`af-south-1`, enable it once under the account's
+Regions) keeps the data in South Africa:
+
+```bash
+aws cloudformation deploy --region af-south-1 --template-file deploy/aws/storage.yaml --stack-name quintara-staging-storage --parameter-overrides Environment=staging --capabilities CAPABILITY_NAMED_IAM
+```
+
+Then the same with `production` in place of both `staging`s. Bucket names are global; if `quintara-…` is taken, add
+`NamePrefix=<something unique>` to `--parameter-overrides`.
+
+Read the settings from the stack's outputs (`aws cloudformation describe-stacks --region af-south-1 --stack-name …`),
+and the secret with `aws secretsmanager get-secret-value --region af-south-1 --secret-id quintara/staging/object-storage-key`.
+They become:
+- `MEDIA_S3_BUCKET`, `AUDIT_S3_BUCKET`;
+- `MEDIA_S3_REGION` and `AUDIT_S3_REGION` (`af-south-1`);
+- the same key pair, in both `MEDIA_S3_ACCESS_KEY_ID`/`_SECRET_ACCESS_KEY` and `AUDIT_S3_…`.
+
+Before relying on it, confirm on the real buckets what the local emulator could not show:
+
+```bash
+aws s3api get-object-lock-configuration --region af-south-1 --bucket quintara-staging-audit
+```
+
+It should say `"ObjectLockEnabled": "Enabled"`. Also check `get-bucket-versioning` on both buckets. The template
+passes `cfn-lint`, and deploying it to the moto emulator created both buckets, encrypted, with the API's user. moto
+does not apply Object Lock, versioning, inline policies or Secrets Manager entries from CloudFormation. The audit-copy
+code itself is tested against a lock-enabled bucket.
+
+**The GitHub environments.** `deploy/github/environments.sh` creates `staging` and `production`. Each may be deployed
+from the default branch only, and production waits for the reviewers named. Run it as a repository admin signed in
+with the GitHub CLI:
+
+```bash
+deploy/github/environments.sh <reviewer> <second-reviewer>
+```
+
+With two or more reviewers, whoever starts a production run cannot approve it themselves. Then add each
+environment's secrets and variables (below, "Release workflow").
 
 ## Checks before and after a release
 

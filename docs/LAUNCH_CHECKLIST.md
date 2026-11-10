@@ -11,11 +11,11 @@ Nothing has been deployed: every step marked **approval** needs Quintara's writt
 | ☐ | Hosting chosen: API host (Render, Fly.io, Railway, AWS ECS or Azure), web host (Vercel or a Node host), managed PostgreSQL with point-in-time recovery, Redis | Nothing can be deployed without them |
 | ☐ | Domain and DNS access for `quintaralifestyle.com` | The four addresses and their certificates |
 | ☐ | Email: a Resend account with the sending domain verified (SPF, DKIM) | Sign-in codes are sent by email; the API will not start without it |
-| ☐ | Two S3-compatible buckets: photographs, and one **with Object Lock** for audit copies | Photographs and the write-once audit log |
+| ☐ | The two buckets, one **with Object Lock**: an AWS account, then one command per environment (`deploy/aws/storage.yaml`) | Photographs and the write-once audit log |
 | ☐ | Payment provider chosen, merchant account approved | Until then production refuses payments (by design) |
 | ☐ | Optional services: Anthropic API key (QÉRA on Claude), Meta WhatsApp Business (QÉRA on WhatsApp), Expo access token | Each works without them in a lesser form; see DEPLOYMENT.md |
 | ☐ | Apple Developer and Google Play accounts | Mobile apps (RELEASE.md) |
-| ☐ | GitHub: the `staging` and `production` environments, with required reviewers on `production` | The release workflow's secrets and its approval gate |
+| ☐ | GitHub: the `staging` and `production` environments, reviewers on `production`: one command (`deploy/github/environments.sh <reviewers>`) by a repository admin | The release workflow's secrets and its approval gate |
 | ☐ | The people: first Super Administrator, and a second (so a lost phone cannot lock everyone out) | First-run, then the console |
 
 ## 2. Legal and policy (Quintara)
