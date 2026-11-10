@@ -53,7 +53,10 @@ test('the API runs as the restricted role, and through it the audit log cannot b
     await refused('DROP TRIGGER audit_logs_append_only ON audit_logs');
     await refused('TRUNCATE experiences');
     await refused('CREATE TABLE intruder (id int)');
-    await refused('SELECT * FROM schema_migrations');
+    // The list of migrations can be read (the release's preflight checks it as this role), never changed.
+    await app.query('SELECT name FROM schema_migrations');
+    await refused(`INSERT INTO schema_migrations (name) VALUES ('9999_forged.sql')`);
+    await refused('DELETE FROM schema_migrations');
     const me = (await app.query<{ rolsuper: boolean; rolcreaterole: boolean; rolcreatedb: boolean }>('SELECT rolsuper, rolcreaterole, rolcreatedb FROM pg_roles WHERE rolname = current_user'))[0]!;
     assert.deepEqual(me, { rolsuper: false, rolcreaterole: false, rolcreatedb: false });
 

@@ -25,6 +25,7 @@ import type { PushProvider } from './push.ts';
 import { runRenewals } from './renewals.ts';
 import { sendWeeklyReport } from './insights.ts';
 import { eraseDueAccounts } from './privacy.ts';
+import { checkDeployment } from './preflight.ts';
 import { purgeExpiredData, retentionFromEnv } from './retention.ts';
 import { runChiefOfStaff } from './chief.ts';
 import { httpCalendarFetcher, syncDueCalendars } from './calendar.ts';
@@ -33,6 +34,15 @@ import { CloudApiWhatsAppProvider, MockWhatsAppProvider } from './whatsapp.ts';
 import type { WhatsAppConfig } from './whatsapp.ts';
 
 const production = process.env.NODE_ENV === 'production';
+// In production, every setting is checked before anything starts: all the problems are listed at once, then it stops.
+if (production) {
+  const { errors, warnings } = checkDeployment(process.env);
+  for (const warning of warnings) console.warn(`Warning: ${warning}`);
+  if (errors.length) {
+    console.error(`The API cannot start until these are fixed:\n${errors.map((e) => `  - ${e}`).join('\n')}`);
+    process.exit(1);
+  }
+}
 const url = process.env.DATABASE_URL;
 if (production && !url) throw new Error('DATABASE_URL is required in production.');
 

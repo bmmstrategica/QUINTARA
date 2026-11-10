@@ -2,6 +2,7 @@
 
 How to put the API and the three web apps live, and what each setting does. The mobile apps are in
 [RELEASE.md](RELEASE.md). Nothing here has been deployed: every step below needs Quintara's approval and accounts.
+What must be in place before launch, and in what order: [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md).
 
 ## What runs where
 
@@ -23,8 +24,7 @@ Suggested addresses: `api.quintaralifestyle.com`, `app.quintaralifestyle.com`, `
 
 Use three, each with its own database and secrets:
 
-| | `NODE_ENV` | `RETENTION_*_DAYS` (eight) | optional | How long working records are kept; defaults in SECURITY.md (POPIA). |
-| `DEPLOY_ENV` | Sign-in | Payments |
+| | `NODE_ENV` | `DEPLOY_ENV` | Sign-in | Payments |
 |---|---|---|---|---|
 | Development (a laptop) | `development` | | address alone, or codes | test checkout, or simulated |
 | Staging | `production` | `staging` | codes by email, two-factor | test checkout (no money) |
@@ -52,6 +52,7 @@ in the repository. `.env.example` lists them all with notes.
 | `REDIS_URL` | more than one API process | Shares rate limits across processes. |
 | `MEDIA_S3_BUCKET` (+ `_REGION`, `_ENDPOINT`, keys) | recommended | Photographs in object storage instead of the database. |
 | `AUDIT_S3_BUCKET` (+ the same), `AUDIT_RETENTION_DAYS` | recommended | Daily write-once copies of the audit log. |
+| `RETENTION_*_DAYS` (eight) | optional | How long working records are kept; defaults in SECURITY.md (POPIA). |
 | `DEPLOY_ENV` | | `staging` lets a staging deployment use the test checkout. |
 | `API_URL` | staging | The API's own public address, for the test checkout's links. |
 | `PAYMENTS` | optional | Development and staging: `simulated` charges at once instead of the test checkout. |
@@ -108,6 +109,69 @@ A stand-in cannot prove the real service accepts the request, so with real keys 
 | Calendars | Connect a Google or Outlook private address. | Today's events appear in the daily brief within half an hour. |
 | Payments | After the provider is chosen: pay, decline and refund with its test cards. | As the e2e checkout journeys, with the provider's own pages. |
 | Photographs and audit copies (S3) | Upload a photograph; wait a day. | It is served; `audit:check-copies` reports the day's copy. |
+
+## Checks before and after a release
+
+- **Preflight** (`pnpm --filter @quintara/api preflight`), run with the environment's settings:
+  - every setting (`src/preflight.ts`): missing or placeholder secrets, the same secret used twice, non-HTTPS or
+    localhost addresses, development switches, incomplete WhatsApp settings;
+  - with `DATABASE_URL`, the database: the API connects as the restricted role, not the owner; every migration is
+    applied; first-run has created a city and an active Super Administrator; no sample (`@example.com`) accounts.
+
+  It prints every problem and exits 1. The API runs the same settings checks when it starts in production, and
+  refuses to start, listing every problem at once.
+- **Smoke test** (`pnpm --filter @quintara/api smoke`, with `SMOKE_API_URL`, `SMOKE_WEB_URL`, `SMOKE_ADMIN_URL`,
+  `SMOKE_MAISON_URL`). Read-only, so it is safe against production. It checks:
+  - the API is alive and ready;
+  - sign-in is by emailed code;
+  - CORS admits the three apps and no one else;
+  - each app is served over HTTPS with HSTS, cannot be framed, and was built for this API (its content security
+    policy names the API it calls);
+  - the console is kept out of search engines.
+
+## Release workflow
+
+`.github/workflows/release.yml` runs by hand only (Actions > Release > Run workflow) and never on a push. It:
+1. builds the API image for the exact commit and publishes it to the GitHub Container Registry;
+2. runs preflight with the target environment's settings (new migrations allowed to be pending);
+3. migrates, with the owner's connection;
+4. runs preflight again, strictly;
+5. calls the hosts' deploy hooks;
+6. waits for `/ready`;
+7. runs the smoke test.
+
+It refuses to run unless CI passed for that commit. A production run also needs:
+- the typed confirmation `deploy production`;
+- approval by the required reviewers set on the `production` environment.
+
+**Setting it up** (once per environment, in GitHub: Settings > Environments > `staging` / `production`):
+
+| Kind | Names |
+|---|---|
+| Secrets | `DATABASE_URL` (the restricted role), `MIGRATION_DATABASE_URL` (the owner), `RESEND_API_KEY`, `MFA_ENCRYPTION_KEY`, `CALENDAR_SECRET`, `REDIS_URL`, `API_DEPLOY_HOOK_URL`, `WEB_DEPLOY_HOOK_URL`, `ADMIN_DEPLOY_HOOK_URL`, `MAISON_DEPLOY_HOOK_URL`; as used: `PAYMENTS_TEST_SECRET` (staging), `ANTHROPIC_API_KEY`, `EXPO_ACCESS_TOKEN`, `WHATSAPP_NUMBER_SECRET`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `MEDIA_S3_ACCESS_KEY_ID`, `MEDIA_S3_SECRET_ACCESS_KEY`, `AUDIT_S3_ACCESS_KEY_ID`, `AUDIT_S3_SECRET_ACCESS_KEY` |
+| Variables | `API_URL`, `WEB_URL`, `ADMIN_URL`, `MAISON_URL`, `WEB_ORIGINS`, `EMAIL_FROM`, `TRUST_PROXY=true`; as used: `MEDIA_S3_BUCKET`, `AUDIT_S3_BUCKET`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_NUMBER` |
+| Protection | `production`: required reviewers (at least one person who is not the one starting the run), and only the default branch may deploy |
+
+The same values are also set on the hosts themselves (the API host's environment, and each web app's
+`NEXT_PUBLIC_*` build settings); the workflow uses its copies for the checks and the migration.
+
+**Deploy hooks.** The API step posts the image address as `imgURL`, which is the form Render's deploy hook takes.
+Other hosts differ, so change that one step once the host is chosen:
+- Fly.io: `flyctl deploy --image $IMAGE`;
+- Railway or ECS: their command-line tools;
+- Vercel (for the web apps): its deploy hook needs no parameters, as written.
+
+**Rehearsed here.** The whole sequence was run in this sandbox on 10 November 2026: a fresh PostgreSQL 16 database,
+`migrate` (then again, applying nothing), `first-run`, `app-role`, preflight as the restricted role with a staging
+configuration ("Ready", five warnings to decide on), and the image built from `apps/api/Dockerfile`, started with
+those settings. It then:
+- reported itself healthy, with `/ready` ok;
+- enforced code sign-in;
+- admitted only the staging origins;
+- stopped cleanly on SIGTERM, with exit code 0.
+
+The deploy hooks and the smoke test against real HTTPS hosts can only be run once the hosts exist. The smoke test was
+run here against production builds of the three apps.
 
 ## Each release
 

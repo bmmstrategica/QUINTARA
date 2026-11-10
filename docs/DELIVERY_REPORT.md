@@ -328,6 +328,48 @@ not in anything deployed.
   host.
 - *Camera scanning at check-in:* as before, not automatable here.
 
+## 4h. Phase 7: deployment prepared, not deployed
+
+Nothing was deployed. Everything a deployment needs, short of Quintara's accounts and approval, is in the
+repository. The order of launch is in [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md).
+
+- **CI runs the browser tests on production builds too**, as agreed: an `e2e-production` job, `next build` plus
+  `next start` of the three apps, against the API. 30 of 30 pass locally in CI mode.
+- **The API refuses to start in production with unsafe or missing settings**, and lists every problem at once
+  (`src/preflight.ts`). Writing these checks found two more defects:
+  - **Email links:** without `WEB_URL`, every link in every email would have pointed at `localhost`. It is now
+    required in production.
+  - **Browser access:** without `WEB_ORIGINS`, the API would have accepted calls only from localhost, so no browser
+    could have used it.
+- **Preflight** (`pnpm --filter @quintara/api preflight`) adds the database:
+  - the restricted role, not the owner;
+  - every migration applied;
+  - first-run done;
+  - no sample accounts.
+
+  The restricted role may now read the list of applied migrations (read-only) so the check can run as it.
+- **Smoke test** (`pnpm --filter @quintara/api smoke`): read-only checks after each deployment, among them that each
+  web app was built for the API it is deployed with. 17 of 17 passed against production builds; deliberately
+  pointed at the wrong API address, it failed and named the fix.
+- **Release workflow** (`.github/workflows/release.yml`):
+  - manual only, and only for a commit that passed CI;
+  - builds and publishes the API image;
+  - preflight, migrate, preflight again, deploy hooks, wait for ready, smoke test;
+  - production needs a typed confirmation and the reviewers' approval.
+
+  It has not been run: it needs the hosts, their deploy hooks and the environments' secrets.
+- **The container image builds** in this sandbox now, which it could not before.
+- **A first deployment was rehearsed** locally with that image and a fresh PostgreSQL 16 database:
+  - migrate, first-run and app-role all ran;
+  - preflight said "Ready";
+  - the container reported itself healthy, enforced code sign-in, admitted only the staging origins, and stopped
+    cleanly on SIGTERM.
+- **A test-setup fault, fixed:** the e2e API ran in watch mode, so an edit during a run restarted it on an empty
+  database (two failures, here only). It now runs without `--watch`.
+
+Still needed from Quintara: hosting, DNS, email, buckets, GitHub environments and reviewers, a payment provider, and
+written approval for production (LAUNCH_CHECKLIST.md, sections 1, 2 and 4).
+
 ## 5. Security assessment
 
 Already strong before this work (docs/SECURITY.md): two-factor for every account, hashed tokens, separate staff
@@ -407,7 +449,8 @@ Statuses: **Tested** = implemented and tested. **Credentials** = implemented, aw
 | | Every console page each role is offered opens, unrefused (eight roles) | Tested | Phase 4 crawl |
 | | Refunds from the payments ledger (finance) | Tested | Phase 4; real refunds wait on the provider, as payments |
 | | Support role: guest lists and check-in | Tested | Phase 4 fix |
-| | Production deployment | Blocked | needs approval, hosting accounts and DNS |
+| | Deployment pipeline, preflight, smoke test, release workflow | Tested | release workflow not run: needs hosts and secrets |
+| | Production deployment | Blocked | needs approval, hosting accounts and DNS (LAUNCH_CHECKLIST.md) |
 
 ## 7. GitHub and approvals
 

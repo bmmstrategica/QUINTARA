@@ -28,6 +28,8 @@ export async function grantAppRole(db: Queryable, role: string, password: string
       format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %I', $1::text),
       format('REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs, staff_activity FROM %I', $1::text),
       format('REVOKE ALL ON schema_migrations FROM %I', $1::text),
+      -- Read-only, so the release's preflight can confirm, as this role, that the schema is current.
+      format('GRANT SELECT ON schema_migrations TO %I', $1::text),
       format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %I', $1::text),
       format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %I', $1::text)
     ]) AS sql`, [role]);

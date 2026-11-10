@@ -1,0 +1,189 @@
+# Releases the API, and starts the web apps' deployments, to staging or production. Run by hand only:
+# Actions > Release > Run workflow. Nothing here runs on a push.
+#
+# Each environment is a GitHub Environment (Settings > Environments) holding its own secrets and variables; see
+# docs/DEPLOYMENT.md, "Release workflow". Give the `production` environment required reviewers: the run then waits
+# for their approval before anything touches production. A production run also needs the confirmation typed below.
+#
+# Steps: build and publish the API image for this exact commit > preflight (settings and database) > migrate >
+# deploy (the host's deploy hook) > smoke test. Any failure stops the run before the next step.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Where to release
+        type: choice
+        options: [staging, production]
+        default: staging
+      confirm:
+        description: For production, type "deploy production"
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  packages: write
+  checks: read
+
+concurrency:
+  group: release-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Check the request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Production needs the typed confirmation
+        if: inputs.environment == 'production' && inputs.confirm != 'deploy production'
+        run: |
+          echo "::error::A production release needs the confirmation \"deploy production\"."
+          exit 1
+      - name: Only a commit that passed CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          state=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs" --jq '[.check_runs[] | select(.name | test("^Types, tests and builds|^End-to-end")) | .conclusion] | if length == 0 then "missing" elif all(. == "success") then "success" else "failed" end')
+          echo "CI for ${{ github.sha }}: $state"
+          test "$state" = "success" || { echo "::error::CI has not passed for this commit."; exit 1; }
+
+  image:
+    name: Build and publish the API image
+    needs: guard
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.name.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/api:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+      - run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - run: docker build -f apps/api/Dockerfile -t "${{ steps.name.outputs.image }}" .
+      - run: docker push "${{ steps.name.outputs.image }}"
+
+  release:
+    name: Release to ${{ inputs.environment }}
+    needs: image
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 30
+    env:
+      IMAGE: ${{ needs.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter "@quintara/api..."
+
+      - name: Preflight (the settings the API will run with, and its database)
+        run: pnpm --filter @quintara/api preflight
+        env:
+          PREFLIGHT_PENDING_MIGRATIONS: allow
+          NODE_ENV: production
+          DEPLOY_ENV: ${{ inputs.environment }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AUTH_MODE: code
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          MFA_ENCRYPTION_KEY: ${{ secrets.MFA_ENCRYPTION_KEY }}
+          CALENDAR_SECRET: ${{ secrets.CALENDAR_SECRET }}
+          WHATSAPP_NUMBER_SECRET: ${{ secrets.WHATSAPP_NUMBER_SECRET }}
+          WHATSAPP_ACCESS_TOKEN: ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
+          WHATSAPP_APP_SECRET: ${{ secrets.WHATSAPP_APP_SECRET }}
+          WHATSAPP_VERIFY_TOKEN: ${{ secrets.WHATSAPP_VERIFY_TOKEN }}
+          WHATSAPP_PHONE_NUMBER_ID: ${{ vars.WHATSAPP_PHONE_NUMBER_ID }}
+          WHATSAPP_BUSINESS_NUMBER: ${{ vars.WHATSAPP_BUSINESS_NUMBER }}
+          PAYMENTS_TEST_SECRET: ${{ secrets.PAYMENTS_TEST_SECRET }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EXPO_ACCESS_TOKEN: ${{ secrets.EXPO_ACCESS_TOKEN }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          WEB_ORIGINS: ${{ vars.WEB_ORIGINS }}
+          WEB_URL: ${{ vars.WEB_URL }}
+          ADMIN_URL: ${{ vars.ADMIN_URL }}
+          API_URL: ${{ vars.API_URL }}
+          TRUST_PROXY: ${{ vars.TRUST_PROXY }}
+          MEDIA_S3_BUCKET: ${{ vars.MEDIA_S3_BUCKET }}
+          MEDIA_S3_ACCESS_KEY_ID: ${{ secrets.MEDIA_S3_ACCESS_KEY_ID }}
+          MEDIA_S3_SECRET_ACCESS_KEY: ${{ secrets.MEDIA_S3_SECRET_ACCESS_KEY }}
+          AUDIT_S3_BUCKET: ${{ vars.AUDIT_S3_BUCKET }}
+          AUDIT_S3_ACCESS_KEY_ID: ${{ secrets.AUDIT_S3_ACCESS_KEY_ID }}
+          AUDIT_S3_SECRET_ACCESS_KEY: ${{ secrets.AUDIT_S3_SECRET_ACCESS_KEY }}
+
+      # The new version's migrations were reported as pending above; this applies them, with the owner's connection.
+      # Take the database snapshot (DEPLOYMENT.md, "Each release") before running a production release.
+      - name: Migrate
+        run: pnpm --filter @quintara/api migrate
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+
+      - name: Preflight again, strict (the schema now current)
+        run: pnpm --filter @quintara/api preflight
+        env:
+          NODE_ENV: production
+          DEPLOY_ENV: ${{ inputs.environment }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AUTH_MODE: code
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          MFA_ENCRYPTION_KEY: ${{ secrets.MFA_ENCRYPTION_KEY }}
+          CALENDAR_SECRET: ${{ secrets.CALENDAR_SECRET }}
+          WHATSAPP_NUMBER_SECRET: ${{ secrets.WHATSAPP_NUMBER_SECRET }}
+          WHATSAPP_ACCESS_TOKEN: ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
+          WHATSAPP_APP_SECRET: ${{ secrets.WHATSAPP_APP_SECRET }}
+          WHATSAPP_VERIFY_TOKEN: ${{ secrets.WHATSAPP_VERIFY_TOKEN }}
+          WHATSAPP_PHONE_NUMBER_ID: ${{ vars.WHATSAPP_PHONE_NUMBER_ID }}
+          WHATSAPP_BUSINESS_NUMBER: ${{ vars.WHATSAPP_BUSINESS_NUMBER }}
+          PAYMENTS_TEST_SECRET: ${{ secrets.PAYMENTS_TEST_SECRET }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EXPO_ACCESS_TOKEN: ${{ secrets.EXPO_ACCESS_TOKEN }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          WEB_ORIGINS: ${{ vars.WEB_ORIGINS }}
+          WEB_URL: ${{ vars.WEB_URL }}
+          ADMIN_URL: ${{ vars.ADMIN_URL }}
+          API_URL: ${{ vars.API_URL }}
+          TRUST_PROXY: ${{ vars.TRUST_PROXY }}
+          MEDIA_S3_BUCKET: ${{ vars.MEDIA_S3_BUCKET }}
+          MEDIA_S3_ACCESS_KEY_ID: ${{ secrets.MEDIA_S3_ACCESS_KEY_ID }}
+          MEDIA_S3_SECRET_ACCESS_KEY: ${{ secrets.MEDIA_S3_SECRET_ACCESS_KEY }}
+          AUDIT_S3_BUCKET: ${{ vars.AUDIT_S3_BUCKET }}
+          AUDIT_S3_ACCESS_KEY_ID: ${{ secrets.AUDIT_S3_ACCESS_KEY_ID }}
+          AUDIT_S3_SECRET_ACCESS_KEY: ${{ secrets.AUDIT_S3_SECRET_ACCESS_KEY }}
+
+      - name: Deploy the API image
+        run: |
+          test -n "$HOOK" || { echo "::error::Set the API_DEPLOY_HOOK_URL secret for this environment (DEPLOYMENT.md)."; exit 1; }
+          curl --fail-with-body -sS -X POST "$HOOK" --data-urlencode "imgURL=$IMAGE"
+        env:
+          HOOK: ${{ secrets.API_DEPLOY_HOOK_URL }}
+
+      - name: Deploy the web apps (their hosts build them with this environment's NEXT_PUBLIC_* settings)
+        run: |
+          for hook in "$WEB" "$ADMIN" "$MAISON"; do
+            test -n "$hook" || { echo "::error::Set WEB_DEPLOY_HOOK_URL, ADMIN_DEPLOY_HOOK_URL and MAISON_DEPLOY_HOOK_URL."; exit 1; }
+            curl --fail-with-body -sS -X POST "$hook"
+          done
+        env:
+          WEB: ${{ secrets.WEB_DEPLOY_HOOK_URL }}
+          ADMIN: ${{ secrets.ADMIN_DEPLOY_HOOK_URL }}
+          MAISON: ${{ secrets.MAISON_DEPLOY_HOOK_URL }}
+
+      - name: Wait for the new API
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf "${{ vars.API_URL }}/ready" >/dev/null && exit 0
+            sleep 10
+          done
+          echo "::error::The API did not become ready within ten minutes."; exit 1
+
+      - name: Smoke test (read-only)
+        run: pnpm --filter @quintara/api smoke
+        env:
+          SMOKE_API_URL: ${{ vars.API_URL }}
+          SMOKE_WEB_URL: ${{ vars.WEB_URL }}
+          SMOKE_ADMIN_URL: ${{ vars.ADMIN_URL }}
+          SMOKE_MAISON_URL: ${{ vars.MAISON_URL }}

@@ -13,7 +13,9 @@
     "load": "node --experimental-strip-types scripts/load.ts",
     "media:to-objects": "node --experimental-strip-types src/media-cli.ts",
     "app-role": "node --experimental-strip-types src/app-role-cli.ts",
-    "audit:check-copies": "node --experimental-strip-types src/audit-check-cli.ts"
+    "audit:check-copies": "node --experimental-strip-types src/audit-check-cli.ts",
+    "preflight": "node --experimental-strip-types src/preflight-cli.ts",
+    "smoke": "node --experimental-strip-types scripts/smoke.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
