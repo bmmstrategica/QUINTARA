@@ -129,6 +129,28 @@ jobs:
           name: playwright-report
           path: playwright-report/
 
+  e2e-production:
+    name: End-to-end journeys on production builds (next build + next start)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+        env:
+          E2E_TARGET: production
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-production
+          path: playwright-report/
+
   visual:
     name: Visual regression (web app screens, both themes, desktop and phone)
     runs-on: ubuntu-latest
