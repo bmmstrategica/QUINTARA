@@ -5,10 +5,12 @@ import { REPORT_REASON_LABELS } from '@quintara/domain';
 import { fmtDate, Loaded, useAdmin, useCan, useLoad, useRun } from '@/lib/admin';
 
 export default function MembersPage() {
+  const { api } = useAdmin();
   const state = useLoad((api) => api.listMembers());
   return (
     <>
       <div><h1>Members</h1><p className="lede">Suspending a member ends their sessions at once. Investor access is granted here, after verification, never by applying.</p></div>
+      <div className="row"><a className="btn ghost" href={api.membersExportUrl()}>Export members as CSV</a><span className="muted" style={{ fontSize: 13 }}>Personal information: each export is recorded in the audit log.</span></div>
       <Loaded state={state}>
         {(members) => (
           <div className="scroll"><table>

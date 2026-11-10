@@ -695,7 +695,9 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   app.get('/admin/v1/tiers/all', (request) => admin.listAllTiers(db, request.ctx));
   app.post('/admin/v1/tiers', async (request, reply) => done(admin.createTier(db, request.ctx, request.ctx.marketId, request.body), reply));
   app.patch<Id>('/admin/v1/tiers/:id', (request, reply) => done(admin.updateTier(db, request.ctx, request.params.id, request.body), reply));
-  app.get('/admin/v1/payments', (request) => admin.listPayments(db, request.ctx));
+  app.get('/admin/v1/payments', (request) => admin.listPayments(db, request.ctx, request.query));
+  app.get('/admin/v1/payments/export', async (request, reply) => reply.type('text/csv; charset=utf-8').header('content-disposition', `attachment; filename="quintara-payments-${new Date().toISOString().slice(0, 10)}.csv"`).send(await admin.exportPayments(db, request.ctx)));
+  app.get('/admin/v1/members/export', async (request, reply) => reply.type('text/csv; charset=utf-8').header('content-disposition', `attachment; filename="quintara-members-${new Date().toISOString().slice(0, 10)}.csv"`).send(await admin.exportMembers(db, request.ctx)));
   app.get('/admin/v1/members', (request) => admin.listMembersForStaff(db, request.ctx));
   app.post<Id>('/admin/v1/members/:id/status', (request, reply) => done(admin.setMemberStatus(db, request.ctx, request.params.id, request.body), reply));
   app.post<Id>('/admin/v1/members/:id/roles', (request, reply) => done(admin.setMemberRole(db, request.ctx, request.params.id, request.body), reply));

@@ -46,6 +46,7 @@ export interface StaffExperience extends Omit<Experience, 'startsAt' | 'capacity
 export type BillingPeriod = 'month' | 'year' | 'once' | 'none';
 export interface StaffTierDetail extends StaffTier { isActive: boolean; members: number }
 export interface TierInput { name: string; priceMinor: number; currency: string; billingPeriod: BillingPeriod; isActive?: boolean; residency?: Residency | null; termMonths?: number | null }
+export interface StaffPaymentsPage { payments: StaffPayment[]; count: number; nextOffset: number | null; totals: { currency: string; receivedMinor: number }[] }
 export interface StaffPayment { id: string; purpose: string; payer: string; description: string; amountMinor: number; refundedMinor: number; currency: string; status: 'pending' | 'paid' | 'failed' | 'refunded'; provider: string; failureReason: string | null; createdAt: string }
 export interface Guest { bookingId: string; memberId: string; memberNumber: string; fullName: string; seats: number; status: string; ticketCode: string; checkedInAt: string | null }
 export interface StaffConciergeRequest extends ConciergeRequest { memberName: string; memberNumber: string }
@@ -173,7 +174,11 @@ export interface AdminApi {
   listAllTiers(): Promise<StaffTierDetail[]>;
   createTier(input: TierInput): Promise<void>;
   updateTier(id: string, changes: Partial<Omit<TierInput, 'currency'>>): Promise<void>;
-  listPayments(): Promise<StaffPayment[]>;
+  /** The ledger a page at a time (newest first), with totals over every payment. */
+  listPayments(query?: { status?: StaffPayment['status']; offset?: number; limit?: number }): Promise<StaffPaymentsPage>;
+  /** Addresses that download the whole ledger, and the members of the city being worked in, as CSV. */
+  paymentsExportUrl(): string;
+  membersExportUrl(): string;
   listMembers(): Promise<StaffMember[]>;
   setMemberStatus(id: string, status: 'active' | 'suspended'): Promise<void>;
   setMemberRole(id: string, role: BusinessRole, granted: boolean): Promise<void>;
@@ -313,7 +318,9 @@ export function createAdminApi(options: HttpApiOptions): AdminApi {
     listAllTiers: () => request('GET', '/admin/v1/tiers/all'),
     createTier: (input) => request('POST', '/admin/v1/tiers', input),
     updateTier: (tierId, changes) => request('PATCH', `/admin/v1/tiers/${id(tierId)}`, changes),
-    listPayments: () => request('GET', '/admin/v1/payments'),
+    listPayments: (q = {}) => request('GET', `/admin/v1/payments${queryString({ status: q.status, offset: q.offset === undefined ? undefined : String(q.offset), limit: q.limit === undefined ? undefined : String(q.limit) })}`),
+    paymentsExportUrl: () => `${options.baseUrl.replace(/\/$/, '')}/admin/v1/payments/export`,
+    membersExportUrl: () => `${options.baseUrl.replace(/\/$/, '')}/admin/v1/members/export`,
     listMembers: () => request('GET', '/admin/v1/members'),
     setMemberStatus: (memberId, status) => request('POST', `/admin/v1/members/${id(memberId)}/status`, { status }),
     setMemberRole: (memberId, role, granted) => request('POST', `/admin/v1/members/${id(memberId)}/roles`, { role, granted }),

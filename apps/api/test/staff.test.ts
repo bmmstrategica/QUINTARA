@@ -350,7 +350,7 @@ test('tiers and payments: administrators only; a price change is audited and doe
     assert.ok(Date.parse(held.paymentDueAt!) - Date.now() > 80 * 60_000);
     await daniel.payBooking(held.id);
     await daniel.cancelBooking(held.id);                                                     // refund window set to the start, so it is refunded
-    const payments = (await admin('GET', '/admin/v1/payments')).body;
+    const payments = (await admin('GET', '/admin/v1/payments')).body.payments;
     assert.deepEqual([payments[0].payer, payments[0].description, payments[0].status, payments[0].refundedMinor], ['Daniel Fourie', 'The Aura Enclave', 'refunded', aura.memberPriceMinor]);
     assert.ok(!/card|pan|cvv/i.test(Object.keys(payments[0]).join(' ')));
   } finally { await s.close(); }

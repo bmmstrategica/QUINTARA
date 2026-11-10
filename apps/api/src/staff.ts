@@ -25,6 +25,7 @@ import type { RequestContext } from './context.ts';
 import type { Db, Queryable } from './db.ts';
 import type { EmailProvider } from './email.ts';
 import { conflict, forbidden, notFound, validation } from './errors.ts';
+import { toCsv } from './csv.ts';
 
 export const DEFAULT_STAFF_SEATS = 5;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -227,13 +228,8 @@ export async function exportAudit(db: Queryable, ctx: RequestContext, query: unk
   const me = requireStaff(ctx, 'admin.audit.view');
   const { entries } = await listAudit(db, ctx, { ...(query as object), limit: 500 });
   await audit(db, me, 'audit.exported', 'audit_log', me, { rows: entries.length, filters: query });
-  const cell = (v: unknown) => {
-    const s = v === null || v === undefined ? '' : typeof v === 'string' ? v : JSON.stringify(v);
-    // Quoted, and a leading = + - @ is neutralised so a spreadsheet never runs it as a formula.
-    return `"${(/^[=+\-@\t\r]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"`;
-  };
   const head = ['Time (UTC)', 'Staff', 'Kind', 'What', 'Recorded as', 'Record', 'Details', 'Answer', 'IP address', 'Device'];
-  return [head.map(cell).join(','), ...entries.map((e) => [e.at, e.staffName, e.kind, e.summary, e.action, e.entityId ? `${e.entityType ?? ''} ${e.entityId}`.trim() : '', e.details, e.status, e.ip, e.device].map(cell).join(','))].join('\r\n') + '\r\n';
+  return toCsv(head, entries.map((e) => [e.at, e.staffName, e.kind, e.summary, e.action, e.entityId ? `${e.entityType ?? ''} ${e.entityId}`.trim() : '', e.details, e.status, e.ip, e.device]));
 }
 
 /** Recomputes both hash chains. Any entry removed or altered shows as the first place the chain breaks. */

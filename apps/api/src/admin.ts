@@ -6,6 +6,7 @@ import { audit, requireStaff } from './context.ts';
 import type { RequestContext } from './context.ts';
 import type { Db, Queryable } from './db.ts';
 import { conflict, forbidden, HttpError, notFound, validation } from './errors.ts';
+import { toCsv } from './csv.ts';
 import { SELECT_EXPERIENCE_ALL, toExperience } from './experiences.ts';
 import { activateApplication } from './membership.ts';
 import { eraseAccount } from './privacy.ts';
@@ -344,11 +345,7 @@ export async function updateTier(db: Db, ctx: RequestContext, id: string, body: 
 
 /* ---------- Payments ledger (read only) ---------- */
 
-export async function listPayments(db: Queryable, ctx: RequestContext) {
-  requireStaff(ctx, 'admin.finance.manage');
-  // No card details exist to show: only the provider's reference is ever stored.
-  const rows = await db.query(
-    `SELECT p.id, p.purpose, p.amount_minor, p.refunded_minor, p.currency_code, p.status, p.provider, p.failure_reason, p.created_at,
+const PAYMENT_SELECT = `SELECT p.id, p.purpose, p.amount_minor, p.refunded_minor, p.currency_code, p.status, p.provider, p.failure_reason, p.created_at,
             COALESCE(pr.full_name, a.data->>'fullName', 'Applicant') AS payer,
             COALESCE(e.title, t.name || ' membership', initcap(p.purpose)) AS description
        FROM payments p
@@ -356,14 +353,60 @@ export async function listPayments(db: Queryable, ctx: RequestContext) {
        LEFT JOIN membership_applications a ON a.id = p.application_id
        LEFT JOIN membership_tiers t ON t.id = a.offered_tier_id
        LEFT JOIN experience_bookings b ON b.id = p.booking_id
-       LEFT JOIN experiences e ON e.id = b.experience_id
-      ORDER BY p.created_at DESC LIMIT 300`);
-  return rows.map((r) => ({
-    id: r.id as string, purpose: r.purpose as string, payer: r.payer as string, description: r.description as string,
-    amountMinor: Number(r.amount_minor), refundedMinor: Number(r.refunded_minor), currency: (r.currency_code as string).trim(),
-    status: r.status as string, provider: r.provider as string, failureReason: (r.failure_reason as string | null) ?? null,
-    createdAt: new Date(r.created_at as string).toISOString(),
-  }));
+       LEFT JOIN experiences e ON e.id = b.experience_id`;
+const toPayment = (r: Record<string, unknown>) => ({
+  id: r.id as string, purpose: r.purpose as string, payer: r.payer as string, description: r.description as string,
+  amountMinor: Number(r.amount_minor), refundedMinor: Number(r.refunded_minor), currency: (r.currency_code as string).trim(),
+  status: r.status as string, provider: r.provider as string, failureReason: (r.failure_reason as string | null) ?? null,
+  createdAt: new Date(r.created_at as string).toISOString(),
+});
+const paymentQuery = z.object({
+  status: z.enum(['pending', 'paid', 'failed', 'refunded']).optional(),
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+});
+
+/**
+ * The payments ledger, newest first, a page at a time, with totals computed over every payment (not just the page),
+ * so the figure for money received never depends on how much of the ledger is on screen.
+ */
+export async function listPayments(db: Queryable, ctx: RequestContext, query: unknown = {}) {
+  requireStaff(ctx, 'admin.finance.manage');
+  const q = parse(paymentQuery, query ?? {});
+  // No card details exist to show: only the provider's reference is ever stored.
+  const rows = await db.query(`${PAYMENT_SELECT} WHERE ($1::text IS NULL OR p.status = $1) ORDER BY p.created_at DESC, p.id DESC LIMIT $2 OFFSET $3`, [q.status ?? null, q.limit, q.offset]);
+  const count = Number((await db.query<{ n: string }>('SELECT count(*) AS n FROM payments WHERE ($1::text IS NULL OR status = $1)', [q.status ?? null]))[0]!.n);
+  const totals = await db.query<{ currency_code: string; received: string }>(
+    `SELECT currency_code, sum(amount_minor - refunded_minor) AS received FROM payments WHERE status IN ('paid', 'refunded') GROUP BY currency_code ORDER BY currency_code`);
+  return {
+    payments: rows.map(toPayment),
+    count,
+    nextOffset: q.offset + rows.length < count ? q.offset + rows.length : null,
+    totals: totals.map((t) => ({ currency: t.currency_code.trim(), receivedMinor: Number(t.received) })),
+  };
+}
+
+/** The whole ledger as CSV, for reconciliation. Recorded in the audit log. */
+export async function exportPayments(db: Queryable, ctx: RequestContext): Promise<string> {
+  const staffId = requireStaff(ctx, 'admin.finance.manage');
+  const rows = (await db.query(`${PAYMENT_SELECT} ORDER BY p.created_at, p.id`)).map(toPayment);
+  await audit(db, staffId, 'payments.exported', 'payment', null, { rows: rows.length });
+  return toCsv(['Time (UTC)', 'Payer', 'For', 'Purpose', 'Amount', 'Refunded', 'Currency', 'Status', 'Provider', 'Reason it failed', 'Reference'],
+    rows.map((p) => [p.createdAt, p.payer, p.description, p.purpose, (p.amountMinor / 100).toFixed(2), (p.refundedMinor / 100).toFixed(2), p.currency, p.status, p.provider, p.failureReason, p.id]));
+}
+
+/** The members of the city being worked in, as CSV (an authorised membership report). Recorded in the audit log. */
+export async function exportMembers(db: Queryable, ctx: RequestContext): Promise<string> {
+  const staffId = requireStaff(ctx, 'admin.members.manage');
+  const rows = await db.query(
+    `SELECT m.member_number, p.full_name, u.email, t.name AS tier_name, m.status, m.joined_at, m.term_ends_at,
+            ARRAY(SELECT r.role_key FROM user_roles r WHERE r.user_id = m.user_id ORDER BY r.role_key) AS roles
+       FROM members m JOIN users u ON u.id = m.user_id JOIN profiles p ON p.user_id = m.user_id JOIN membership_tiers t ON t.id = m.tier_id
+      WHERE m.home_market_id = $1 ORDER BY m.member_number`, [ctx.marketId]);
+  await audit(db, staffId, 'members.exported', 'member', null, { rows: rows.length, marketId: ctx.marketId });
+  const day = (v: unknown) => (v ? new Date(v as string).toISOString().slice(0, 10) : '');
+  return toCsv(['Member number', 'Name', 'Email', 'Membership', 'Status', 'Joined', 'Term ends', 'Roles'],
+    rows.map((r) => [r.member_number, r.full_name, r.email, r.tier_name, r.status, day(r.joined_at), day(r.term_ends_at), (r.roles as string[]).join(' ')]));
 }
 
 /* ---------- Closed accounts awaiting erasure ---------- */
