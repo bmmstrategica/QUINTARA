@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ADMISSION_LABEL, ADMISSIONS, localToInstant } from '@quintara/domain';
 import type { Admission } from '@quintara/domain';
-import { fmtDate, Loaded, useAdmin, useLoad, useRun } from '@/lib/admin';
+import { fmtDate, Loaded, useAdmin, useCan, useLoad, useRun } from '@/lib/admin';
 
 export default function ExperiencesPage() {
   const { api, market } = useAdmin();
@@ -12,6 +12,8 @@ export default function ExperiencesPage() {
   const router = useRouter();
   const state = useLoad((client) => client.listExperiences());
   const { run, pending, error } = useRun();
+  // Guest-list staff (Support) see the experiences to reach their guest lists, and change nothing else.
+  const canEdit = useCan('admin.experiences.manage');
 
   async function create(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,7 +32,7 @@ export default function ExperiencesPage() {
 
   return (
     <>
-      <div><h1>Experiences</h1><p className="lede">New experiences start as drafts. Publish from the experience page when it is ready. Tick “Open to guests” for each experience guests may see; guests never see dates or seat numbers.</p></div>
+      <div><h1>Experiences</h1><p className="lede">{canEdit ? <>New experiences start as drafts. Publish from the experience page when it is ready. Tick “Open to guests” for each experience guests may see; guests never see dates or seat numbers.</> : 'Open an experience for its guest list: confirm seats, check guests in, cancel a booking.'}</p></div>
       <Loaded state={state}>
         {(experiences) => (
           <div className="scroll"><table>
@@ -41,8 +43,8 @@ export default function ExperiencesPage() {
                 <td>{fmtDate(e.startsAt, e.timezone)}</td>
                 <td>{ADMISSION_LABEL[e.admission]}{e.isHidden ? <small>Hidden from the calendar</small> : null}</td>
                 <td>
-                  <label className="check"><input type="checkbox" checked={e.openToGuests} disabled={pending} aria-label={`Open ${e.title} to guests`}
-                    onChange={(event) => run(() => api.updateExperience(e.id, { openToGuests: event.target.checked }), state.reload)} /> {e.openToGuests ? 'Yes' : 'No'}</label>
+                  {canEdit ? <label className="check"><input type="checkbox" checked={e.openToGuests} disabled={pending} aria-label={`Open ${e.title} to guests`}
+                    onChange={(event) => run(() => api.updateExperience(e.id, { openToGuests: event.target.checked }), state.reload)} /> {e.openToGuests ? 'Yes' : 'No'}</label> : e.openToGuests ? 'Yes' : 'No'}
                 </td>
                 <td>{e.seatsTaken} of {e.capacity}</td>
                 <td><span className={`chip ${e.status === 'published' ? 'ok' : e.status === 'draft' ? 'gold' : ''}`}>{e.status[0]?.toUpperCase() + e.status.slice(1)}</span></td>
@@ -52,6 +54,7 @@ export default function ExperiencesPage() {
           </table></div>
         )}
       </Loaded>
+      {canEdit ? <>
       <h2>New experience</h2>
       <form className="panel" onSubmit={create}>
         <div className="form">
@@ -71,6 +74,7 @@ export default function ExperiencesPage() {
         {error ? <p className="error" role="alert">{error}</p> : null}
         <div><button className="btn" disabled={pending}>{pending ? 'Saving' : 'Create draft'}</button></div>
       </form>
+      </> : null}
     </>
   );
 }

@@ -75,7 +75,7 @@ const NAV: [href: string, label: string, permissions: StaffPermission[]][] = [
   ['/tiers', 'Tiers', ['admin.finance.manage']],
   ['/payments', 'Payments', ['admin.finance.manage']],
   ['/renewals', 'Renewals', ['admin.finance.manage']],
-  ['/experiences', 'Experiences', ['admin.experiences.manage']],
+  ['/experiences', 'Experiences', ['admin.experiences.manage', 'admin.bookings.manage']],
   ['/concierge', 'Concierge', ['admin.concierge.manage']],
   ['/business', 'Business', ['admin.business.manage']],
   ['/partners', 'Partners', ['admin.providers.manage']],

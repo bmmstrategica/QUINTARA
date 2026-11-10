@@ -27,6 +27,8 @@ export default function ExperiencePage() {
 function Detail({ experience: e, guests, members, onChanged }: { experience: StaffExperience; guests: Guest[]; members: StaffMember[]; onChanged: () => void }) {
   const { api } = useAdmin();
   const { run, pending, error } = useRun();
+  // Guest-list staff (Support) work the guest list; the experience itself is changed by experiences staff.
+  const canEdit = useCan('admin.experiences.manage');
   const [capacity, setCapacity] = useState(e.capacity);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [invitee, setInvitee] = useState('');
@@ -39,7 +41,8 @@ function Detail({ experience: e, guests, members, onChanged }: { experience: Sta
         <span className={`chip ${e.status === 'published' ? 'ok' : 'gold'}`}>{e.status[0]?.toUpperCase() + e.status.slice(1)}</span>
       </div>
       {error ? <p className="error" role="alert">{error}</p> : null}
-      <div className="panel">
+      {!canEdit ? <p className="note">{e.seatsTaken} of {e.capacity} seats taken.</p> : null}
+      {canEdit ? <div className="panel">
         <div className="row">
           <strong style={{ fontWeight: 500 }}>{e.seatsTaken} of {e.capacity} seats taken</strong>
           <label className="check">Capacity<input type="number" min={1} value={capacity} onChange={(event) => setCapacity(Number(event.target.value))} style={{ width: 90 }} /></label>
@@ -49,9 +52,9 @@ function Detail({ experience: e, guests, members, onChanged }: { experience: Sta
           <label className="check"><input type="checkbox" checked={e.isHidden} disabled={pending} onChange={(event) => run(() => api.updateExperience(e.id, { isHidden: event.target.checked }), onChanged)} /> Hidden from the calendar</label>
           <label className="check"><input type="checkbox" checked={e.openToGuests} disabled={pending} onChange={(event) => run(() => api.updateExperience(e.id, { openToGuests: event.target.checked }), onChanged)} /> Open to guests</label>
         </div>
-      </div>
+      </div> : null}
 
-      {e.memberPriceMinor > 0 ? (
+      {canEdit && e.memberPriceMinor > 0 ? (
         <div className="panel">
           <div className="row">
             <strong style={{ fontWeight: 500 }}>Payment rules</strong>
@@ -102,8 +105,10 @@ function Detail({ experience: e, guests, members, onChanged }: { experience: Sta
         </>
       ) : null}
 
-      <h2>Cancel the experience</h2>
-      <CancelExperience e={e} guests={guests} onChanged={onChanged} />
+      {canEdit ? <>
+        <h2>Cancel the experience</h2>
+        <CancelExperience e={e} guests={guests} onChanged={onChanged} />
+      </> : null}
     </>
   );
 }

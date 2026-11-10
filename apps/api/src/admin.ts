@@ -2,7 +2,7 @@
 import { ADMISSIONS, APPLICATION_APPROVED_MESSAGE, EMPTY_APPLICATION, RESIDENCIES, staffCan } from '@quintara/domain';
 import type { ApplicationData, Experience } from '@quintara/domain';
 import { z } from 'zod';
-import { audit, requireStaff } from './context.ts';
+import { audit, requireStaff, requireStaffAny } from './context.ts';
 import type { RequestContext } from './context.ts';
 import type { Db, Queryable } from './db.ts';
 import { conflict, forbidden, HttpError, notFound, validation } from './errors.ts';
@@ -151,7 +151,8 @@ type StaffExperience = Omit<Experience, 'startsAt' | 'capacity' | 'seatsTaken'> 
 const toStaffExperience = (row: Record<string, unknown>): StaffExperience => ({ ...(toExperience(row, true) as Experience & { startsAt: string; capacity: number; seatsTaken: number }), status: row.status as string, isHidden: Boolean(row.is_hidden), seatsHeld: Number(row.seats_held), paymentHoldMinutes: Number(row.payment_hold_minutes), refundHours: Number(row.refund_hours) });
 
 export async function listExperiencesForStaff(db: Queryable, ctx: RequestContext): Promise<StaffExperience[]> {
-  requireStaff(ctx, 'admin.experiences.manage');
+  // Read-only for staff who look after guest lists and check-in (Support): the guest lists hang off the experiences.
+  requireStaffAny(ctx, ['admin.experiences.manage', 'admin.bookings.manage']);
   return (await db.query(`${SELECT_EXPERIENCE_ALL} AND e.market_id = $2 ORDER BY e.starts_at`, [null, ctx.marketId])).map(toStaffExperience);
 }
 

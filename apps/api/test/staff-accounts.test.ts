@@ -83,7 +83,7 @@ test('each staff role has the powers of its role and no more, checked by the ser
       ['/admin/v1/members', ['executive_admin', 'membership']],
       ['/admin/v1/payments', ['executive_admin', 'finance']],
       ['/admin/v1/insights', ['executive_admin', 'finance']],
-      ['/admin/v1/experiences', ['executive_admin', 'experiences']],
+      ['/admin/v1/experiences', ['executive_admin', 'experiences', 'support']],     // support: read-only, for the guest lists
       ['/admin/v1/concierge-requests', ['support']],
       ['/admin/v1/partners', []],
       ['/admin/v1/products', []],
@@ -107,6 +107,13 @@ test('each staff role has the powers of its role and no more, checked by the ser
     const support = await s.staff('help@quintara.test');
     assert.equal(await status(support, '/admin/v1/members'), 403);
     assert.equal((await support('GET', '/admin/v1/audit')).body.all, false);
+    // Support reaches the guest lists through the experiences, but cannot change, create or cancel an experience.
+    const help = await as('help');
+    const experience = (await help('GET', '/admin/v1/experiences')).body[0];
+    assert.equal((await help('GET', `/admin/v1/experiences/${experience.id}/guests`)).status, 200);
+    assert.equal((await help('PATCH', `/admin/v1/experiences/${experience.id}`, { capacity: 99 })).status, 403);
+    assert.equal((await help('POST', `/admin/v1/experiences/${experience.id}/cancel`, { reason: 'Not mine to cancel.' })).status, 403);
+    assert.equal((await help('POST', '/admin/v1/experiences', {})).status, 403);
     // A role cannot be invented.
     assert.equal((await admin('POST', '/admin/v1/staff', { fullName: 'Someone Else', email: 'else@quintara.test', role: 'owner' })).status, 422);
   } finally { await s.close(); }
