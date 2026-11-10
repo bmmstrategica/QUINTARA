@@ -187,6 +187,37 @@ provider-specific step.
   image's registry was not reachable from this environment. moto is an emulator, so check the first real bucket in
   staging. The retention period (2,555 days by default) is for legal confirmation.
 
+## 4f. Phase 2 completed, Phase 3 under way
+
+Phase 2 (back-end services) closed four gaps found on a second audit against the brief:
+
+- **Cancellations decided by Quintara.** Staff cancel one booking with a reason, and finance chooses the refund (all,
+  part or none). Cancelling a whole experience cancels every booking and refunds everyone in full, whatever the
+  refund window. An experience can no longer be set to "cancelled" by a plain edit, which would skip its guests. The
+  member sees the reason on the booking as well as in a notification.
+- **Discounts on membership fees**, granted by finance when an application is approved (an amount or a percentage,
+  with a reason), audited, charged through either payment path, and shown to the applicant as fee, discount and
+  amount due. A full discount starts the membership at once.
+- **No silent caps.** The payments ledger showed only the latest 200 payments and totalled only those. It now pages
+  and totals every payment by currency. Payments and members export as CSV (finance and admin roles only; every
+  export audited; spreadsheet formulas neutralised).
+- **Data retention (POPIA).** Hourly deletion of working records past their period (ended sessions, used codes,
+  delivered emails and so on; table in SECURITY.md). The periods are defaults for legal review.
+
+Phase 3 (web app completion) so far:
+
+- Every member and guest method of the API is called from a web screen. The only exception is push notification
+  settings, which are phone-only by design.
+- No placeholders or dead controls were found. "Coming soon" appears only on a TV episode that has no video yet.
+- A new e2e test (`e2e/routes.spec.ts`) crawls the web app through its own links, once as a visitor (28 pages) and
+  once as a member (34 pages, including experience, lifestyle, service and member pages behind ids). It fails on
+  uncaught errors, console errors, server errors, error pages and links to missing pages. Both runs pass.
+
+Evidence at this point:
+- API: 205 tests, 0 failing, 11 skipped; the skipped tests need PostgreSQL, Redis or S3 and run in CI.
+- The retention test also passed on PostgreSQL 16 as the restricted role.
+- e2e: 18 tests, all passing.
+
 ## 5. Security assessment
 
 Already strong before this work (docs/SECURITY.md): two-factor for every account, hashed tokens, separate staff
@@ -255,6 +286,11 @@ Statuses: **Tested** = implemented and tested. **Credentials** = implemented, aw
 | | Photographs in object storage | Credentials | built and tested (in memory and an S3 protocol server); needs a bucket |
 | | Restricted database role | Tested | every API test runs as it in CI |
 | | Write-once daily audit copies | Credentials | built and tested; needs a bucket with Object Lock; retention period for legal review |
+| | Staff cancellations with finance-approved refunds; whole-experience cancellation | Tested | Phase 2; e2e |
+| | Membership fee discounts | Tested | Phase 2 |
+| | Payments ledger paging, totals; payments and members CSV export | Tested | Phase 2 |
+| | Data retention (POPIA) | Tested | Phase 2; periods for legal review |
+| | Every web page opens without errors (visitor, member) | Tested | Phase 3 crawl |
 | | Production deployment | Blocked | needs approval, hosting accounts and DNS |
 
 ## 7. GitHub and approvals
