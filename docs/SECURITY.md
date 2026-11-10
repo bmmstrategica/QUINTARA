@@ -159,6 +159,22 @@ This covers members, guest accounts, applicants and staff. There are no password
 - **Data export.** Members can export their data.
 - **Account erasure.** Closing an account erases the personal data after a 30-day cooling-off period. Two-factor
   secrets and recovery codes are deleted with the account.
+- **Retention.** Working records are deleted once they have served their purpose (`apps/api/src/retention.ts`,
+  checked hourly). The periods below are defaults for legal review; each can be changed with its variable:
+
+  | Record | Deleted after | Variable |
+  | --- | --- | --- |
+  | Sessions signed out or expired (with their push devices) | 30 days | `RETENTION_SESSION_DAYS` |
+  | Sign-in codes used or expired | 1 day | `RETENTION_SIGN_IN_CODE_DAYS` |
+  | Two-factor set-ups never finished | 1 day | `RETENTION_MFA_PENDING_DAYS` |
+  | Emails sent, skipped or failed (subject and recipient) | 90 days | `RETENTION_EMAIL_DAYS` |
+  | QÉRA proposals cancelled, superseded, failed or expired | 90 days | `RETENTION_PROPOSAL_DAYS` |
+  | WhatsApp message ids (kept to ignore retries) | 30 days | `RETENTION_WHATSAPP_DAYS` |
+  | Guests' daily QÉRA time counters | 30 days | `RETENTION_GUEST_USAGE_DAYS` |
+  | Push devices switched off and not seen since | 90 days | `RETENTION_PUSH_DEVICE_DAYS` |
+
+  Not deleted by this job: the audit log and staff activity (security and legal record), payments (accounting),
+  confirmed QÉRA actions, and members' own content, which goes with the account.
 - **Consent** is recorded for the directory, marketing, suggestions, calendar and WhatsApp.
 - **Secrets** are encrypted at rest with separate keys:
   - `MFA_ENCRYPTION_KEY`: authenticator secrets;

@@ -25,6 +25,7 @@ import type { PushProvider } from './push.ts';
 import { runRenewals } from './renewals.ts';
 import { sendWeeklyReport } from './insights.ts';
 import { eraseDueAccounts } from './privacy.ts';
+import { purgeExpiredData, retentionFromEnv } from './retention.ts';
 import { runChiefOfStaff } from './chief.ts';
 import { httpCalendarFetcher, syncDueCalendars } from './calendar.ts';
 import { seed } from './seed.ts';
@@ -181,7 +182,14 @@ await app.listen({ port: Number(process.env.PORT ?? 4000), host: process.env.HOS
 
 // Housekeeping: retry any email that did not go out, erase closed accounts whose cooling-off period has ended,
 // and let QÉRA send what it sends of its own accord.
+// Working records past their retention period (retention.ts), checked hourly. A bad RETENTION_*_DAYS stops the start.
+const retention = retentionFromEnv(process.env);
+let retentionAt = 0;
 const housekeeping = setInterval(() => {
+  if (Date.now() - retentionAt >= 3_600_000) {
+    retentionAt = Date.now();
+    void purgeExpiredData(db, retention).then((r) => { if (Object.values(r).some((n) => n > 0)) app.log.info(r, 'retention'); }).catch((error) => app.log.error(error));
+  }
   void deliverEmails(db, email, webUrl).then(() => deliverPartnerBookings(db, email, webUrl)).catch((error) => app.log.error(error));
   void eraseDueAccounts(db).then((n) => { if (n) app.log.info(`Erased ${n} closed account(s).`); }).catch((error) => app.log.error(error));
   // Files of deleted photographs (replaced pictures, erased accounts) are removed from the bucket too.

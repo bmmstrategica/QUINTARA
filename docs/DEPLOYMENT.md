@@ -23,7 +23,8 @@ Suggested addresses: `api.quintaralifestyle.com`, `app.quintaralifestyle.com`, `
 
 Use three, each with its own database and secrets:
 
-| | `NODE_ENV` | `DEPLOY_ENV` | Sign-in | Payments |
+| | `NODE_ENV` | `RETENTION_*_DAYS` (eight) | optional | How long working records are kept; defaults in SECURITY.md (POPIA). |
+| `DEPLOY_ENV` | Sign-in | Payments |
 |---|---|---|---|---|
 | Development (a laptop) | `development` | | address alone, or codes | test checkout, or simulated |
 | Staging | `production` | `staging` | codes by email, two-factor | test checkout (no money) |
