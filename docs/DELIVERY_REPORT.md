@@ -92,17 +92,19 @@ passed on the final code.
 
 ## 4. Quality assurance
 
-**Executed on the final code of stage 3 (9 November 2026):**
+**Executed on the final code of stage 4 (10 November 2026):**
 
 | Suite | Result |
 |---|---|
 | Type-check, 9 packages | passed |
-| API tests (unit, integration, security, contract), in-memory | **174 passed, 0 failed**, 5 PostgreSQL-only races skipped (153 before this work) |
-| The same 179 API tests on **PostgreSQL 16** (fresh database each, 10 connections) | **179 passed, 0 failed** |
+| API tests (unit, integration, security, contract), in-memory with Redis | **179 passed, 0 failed**, 5 PostgreSQL-only races skipped (153 before this work) |
+| API tests on **PostgreSQL 16** (fresh database each, 10 connections; stage 3) | **179 passed, 0 failed** |
 | Load test on PostgreSQL 16 (50 members at once, 20 s) | 568 requests/s, p95 158 ms, 0 errors (150 at once: 530/s, p95 495 ms, 0 errors) |
 | Visual regression (40 screens, both themes, desktop and phone) | passed; deterministic across repeated runs |
 | Offline-mock client tests | 8 passed |
 | End-to-end browser journeys (Playwright, Chromium) | 9 passed |
+| Accessibility (axe, WCAG 2.1 A and AA): 21 web, 15 admin and 3 shop views, both themes | no serious or critical violations |
+| `pnpm audit --prod` for the API, web app, admin console and shop | no advisories |
 | Production builds: web, admin, Maison | succeeded |
 | Migrations and first-run on PostgreSQL 16 | succeeded, idempotent |
 | API on its image's production-only dependencies | booted, `/ready` ok |
@@ -160,6 +162,18 @@ provider-specific step.
 - **Live messaging** on the web: open conversations, the message list, notifications and the header's unread dots
   update while the page is visible, without a reload.
 
+## 4d. Stage 4: accessibility, shared rate limits, mobile live updates, security updates
+
+- **Accessibility** (`e2e/accessibility.spec.ts`, in CI): axe checks WCAG 2.1 A and AA in both themes. It found two
+  problems, both fixed: a faint month label in the visitor date block (2.99:1 in light, 4.06:1 in dark; 4.5:1
+  required), and shop cards whose accessible name left out their visible text. The visual suite was made stricter after
+  it let the first fix through unnoticed.
+- **Shared rate limits** through Redis (`REDIS_URL`), and a **graceful shutdown** on SIGTERM. Tested with two servers
+  sharing a real Redis, a Redis outage, and a real SIGTERM.
+- **Mobile**: messages and notifications refresh while the app is in the foreground.
+- **Security updates**: Next.js 16.4.6 closes two critical unauthenticated remote code execution advisories in the
+  version the apps used; zod, fastify and fast-uri patched too.
+
 ## 5. Security assessment
 
 Already strong before this work (docs/SECURITY.md): two-factor for every account, hashed tokens, separate staff
@@ -172,8 +186,8 @@ Insights permission), and in stage 2 the checkout's protections (signed webhooks
 addresses limited to Quintara's apps, exactly-once settlement, refunds of late money). The Anthropic key stays on the server, and QÉRA can only propose actions, never take them.
 
 **Outstanding risks before launch:** a real payment provider's adapter for the hosted checkout (no card data at Quintara); an
-independent penetration test; a non-superuser database role; daily write-once audit export; Redis-backed rate limits
-with more than one API process; `pnpm audit` advisories in Expo build tooling (not on servers).
+independent penetration test; a non-superuser database role; daily write-once audit export; `REDIS_URL` set once more
+than one API process runs; the Expo SDK advisories (build tooling, and expo-router on the phone).
 
 **For professional review:** POPIA registration of the Information Officer and a privacy policy naming the processors
 (hosting, Resend, the payment provider, Meta, and Anthropic if QÉRA uses Claude); the membership and automatic-renewal
@@ -211,7 +225,7 @@ Statuses: **Tested** = implemented and tested. **Credentials** = implemented, aw
 | Maison Quintara | Products, stock, member pricing, cart, guest orders, tracking | Tested | existing |
 | | Checkout payment | Partial | as membership payment |
 | Networking | Directory, connections, messages, blocking, reports | Tested | existing |
-| | Live messages and unread indicators (web) | Tested | polling while visible (5–30 s); mobile refreshes when opened |
+| | Live messages and unread indicators | Tested | web (e2e); mobile refreshes in the foreground (typecheck and iOS bundle only, not run on a device) |
 | QÉRA | Rule-based model, tools, proposals, memory, briefs | Tested | existing |
 | | Claude as hosted model | Credentials | `ANTHROPIC_API_KEY`; tested offline only |
 | | WhatsApp | Credentials | six `WHATSAPP_*` settings |
@@ -223,6 +237,8 @@ Statuses: **Tested** = implemented and tested. **Credentials** = implemented, aw
 | Platform | Readiness probe, Dockerfile, CI, deployment guide | Tested | image build itself runs in CI |
 | | Concurrency on PostgreSQL, load tests | Tested | stage 3 |
 | | Visual regression | Tested | web app; admin and shop not covered (section 4) |
+| | Accessibility (WCAG 2.1 AA, automated) | Tested | web, admin, shop; a manual screen-reader review is still advised |
+| | Shared rate limits, graceful shutdown | Tested | Redis needed in production once more than one API process runs |
 | | Production deployment | Blocked | needs approval, hosting accounts and DNS |
 
 ## 7. GitHub and approvals

@@ -194,6 +194,9 @@ This covers members, guest accounts, applicants and staff. There are no password
 | 16 | An experience that had already started could still be booked, and paid for. | Medium | Refused with 409 in the API and the offline mock. |
 | 17 | Liveness (`/health`) read the database through the session lookup, so a database blip could restart healthy API processes. | Low | Probes skip the session lookup; `/ready` checks the database separately. |
 | 18 | Insights (revenue) was readable by anyone who could manage members. | Low | Its own permission, `admin.insights.view`. |
+| 19 | Next.js 16.3.8 (web, admin, shop) had two critical unauthenticated remote code execution advisories and a denial of service; zod had a high-severity memory exhaustion; fastify and fast-uri had low and moderate ones. | Critical | Next.js 16.4.6, zod 4.6.7, fastify 5.12.8, fast-uri patched (10 November 2026). |
+| 20 | Rate limits were counted per process, so running several API processes would multiply every limit. | Medium | Shared through Redis (`REDIS_URL`), with hashed keys and an in-process fallback. |
+| 21 | A deploy or scale-down could cut requests off mid-way (no shutdown handling). | Low | SIGTERM drains requests in flight, then closes Redis and the database. |
 
 **Paying through a hosted checkout (stage 2).** Card details are typed only on the provider's page. The provider's
 webhook (`POST /v1/payments/webhook`) is read as raw bytes and refused unless its signature checks; it is exempt from
@@ -203,10 +206,14 @@ The test checkout page exists only with the test provider (never in production) 
 **Database connections** that drop (a restart, failover or terminated session) are handled by the pool and logged;
 before stage 3 one would have ended the API process. **The admin console may use the camera** (`camera=(self)`), for scanning tickets at check-in; the web app may not.
 
-**Dependencies.** The remaining `pnpm audit` advisories are in Expo's and Metro's build tools (`node-forge`,
-`braces`, `uuid` in `@expo/cli` and Metro) and in `decode-uri-component`, which expo-router uses on the device.
-None runs on the API or the web servers. Each will be resolved when Expo updates them; run `pnpm audit` before
-each release.
+**Dependencies.** On 10 November 2026 `pnpm audit --prod` reports nothing in the API, the web app, the admin console or
+the shop. The remaining advisories are in Expo SDK 57's build tools (`node-forge`, `uuid`, `glob`, `minimatch`,
+`deepmerge`, an older `zod` in `@expo/cli`), which run on build machines only, and in `decode-uri-component`, which
+expo-router uses on the phone (a denial of service from a malformed link, affecting only that phone). They follow the
+SDK's pinned versions and go with the next Expo SDK upgrade. Run `pnpm audit --prod` before each release; CI reports it.
+
+**Rate limits** are counted in Redis when `REDIS_URL` is set, so every API process shares them. Keys are SHA-256 hashes;
+no address, email or number is stored there. If Redis is unreachable the API counts in its own process and logs it.
 
 ## Before launch
 
@@ -219,5 +226,5 @@ each release.
 5. Copy the audit log to separate, write-once storage on a schedule (for example a daily export to an object
    storage bucket with object lock), so a copy survives even a full database compromise.
 6. Commission an independent penetration test of the production setup.
-7. Move the in-process rate limits to Redis if more than one API server runs.
+7. Set `REDIS_URL` before running more than one API process, so rate limits are shared.
 8. Register the Information Officer under POPIA and publish the privacy policy (already in RELEASE.md).

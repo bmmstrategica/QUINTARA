@@ -865,3 +865,12 @@ Passcode fallback, and "Sign out" on the lock screen.
 - `pnpm visual`: 40 web screenshots compared with `e2e/visual.spec.ts-snapshots/` (offline mock, frozen clock).
 - Messages and notifications on the web update while the page is open (`useLive` in `app-core`, quiet `refresh`), and
   the header shows unread dots.
+
+## Accessibility, shared rate limits and graceful shutdown
+
+- `e2e/accessibility.spec.ts` (part of `pnpm e2e`): axe checks WCAG 2.1 A and AA on the web app, admin console and shop,
+  in both themes, and fails on serious or critical violations.
+- Rate limits go through `apps/api/src/ratelimit.ts`: in the process by default, shared through Redis with `REDIS_URL`
+  (tests: `TEST_REDIS_URL`). The API drains requests and closes its connections on SIGTERM.
+- Mobile registers the app's foreground state with `setVisibilitySource`, so `useLive` screens refresh only while the app
+  is open.

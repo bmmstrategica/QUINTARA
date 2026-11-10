@@ -48,6 +48,7 @@ in the repository. `.env.example` lists them all with notes.
 | `WEB_ORIGINS` | yes | The web app, admin console and shop addresses, comma-separated. Only these may call with cookies. |
 | `WEB_URL`, `ADMIN_URL` | yes | Where email links point. |
 | `TRUST_PROXY=true` | behind a load balancer | So rate limits see real addresses. |
+| `REDIS_URL` | more than one API process | Shares rate limits across processes. |
 | `DEPLOY_ENV` | | `staging` lets a staging deployment use the test checkout. |
 | `API_URL` | staging | The API's own public address, for the test checkout's links. |
 | `PAYMENTS` | optional | Development and staging: `simulated` charges at once instead of the test checkout. |
@@ -107,8 +108,12 @@ was written since); do this only with approval.
 
 The load test (`pnpm --filter @quintara/api load` against a staging database) gives a baseline: one API process
 handled about 550 requests per second with a 95th percentile under 160 ms at 50 members at once, on 4 shared cores.
-Run it against staging after each significant change and before launch. To run more than one API process, first move
-the rate limits to Redis.
+Run it against staging after each significant change and before launch.
+
+**More than one API process.** Set `REDIS_URL` (a managed Redis 7, private network, with a password) so rate limits are
+shared; otherwise each process counts on its own. The API stops cleanly on SIGTERM: it finishes the requests in flight
+(up to 25 seconds) before exiting, so rolling deploys do not cut requests off. Health checks: `/health` for liveness,
+`/ready` for readiness.
 
 ## Monitoring
 
