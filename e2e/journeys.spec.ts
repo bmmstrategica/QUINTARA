@@ -374,3 +374,53 @@ test('finance refund part of a payment from the ledger; the member is told, and 
   await member.goto(`${WEB}/bookings`);
   await expect(member.locator('article.item-row').filter({ hasText: 'The Aura Enclave' }).getByText(/confirmed/i).first()).toBeVisible();
 });
+
+test('a guest buys in the Maison Quintara shop; staff move the order along in the console; the buyer follows each step', async ({ browser }) => {
+  const SHOP = 'http://localhost:3002', stamp = Date.now().toString(36), name = `Naledi Buyer ${stamp}`;
+  const buyer = await browser.newPage();
+  buyer.on('dialog', (dialog) => void dialog.accept());
+  await buyer.goto(SHOP);
+  // The first piece that can be bought.
+  const pieces = buyer.locator('button.piece');
+  await expect(pieces.first()).toBeVisible();
+  for (let i = 0; i < await pieces.count(); i++) {
+    await pieces.nth(i).click();
+    const add = buyer.getByRole('button', { name: 'Add to bag' });
+    if (await add.count()) { await add.click(); break; }
+    await buyer.getByRole('button', { name: 'Close' }).first().click();
+  }
+  // Adding a piece opens the bag.
+  await expect(buyer.getByRole('dialog', { name: 'Your bag' })).toBeVisible();
+  await buyer.getByLabel('Your name').fill(name);
+  await buyer.getByLabel(/^Email address, for your confirmation/).fill(`naledi.${stamp}@example.com`);
+  await buyer.getByLabel('Delivery address').fill('12 Kloof Street, Gardens, Cape Town, 8001');
+  await buyer.getByRole('button', { name: /^Order and pay R/ }).click();
+  // Out to the provider's checkout and back to the shop, which shows the order once the API has the payment.
+  await buyer.waitForURL(/\/v1\/payments\/test-checkout\//);
+  await buyer.getByRole('link', { name: 'Pay', exact: true }).click();
+  await buyer.waitForURL(/localhost:3002\/\?payment=/);
+  await expect(buyer.getByRole('heading', { name: 'Thank you' })).toBeVisible();
+  const orderNumber = (await buyer.getByText(/^Order Q-\d+/).textContent())!.match(/Q-\d+/)![0];
+
+  // Staff in the console: prepare, dispatch with tracking, confirm received.
+  const staff = await browser.newPage();
+  staff.on('dialog', (dialog) => void dialog.accept());       // each step is confirmed: the buyer is told at once
+  await adminSignIn(staff, 'admin@example.com');
+  await staff.goto(`${ADMIN}/orders`);
+  const card = staff.getByRole('article', { name: `Order ${orderNumber}` });
+  await expect(card).toContainText(name);
+  await card.getByRole('button', { name: 'Start processing' }).click();
+  await card.locator('form').getByRole('button', { name: /Start processing|Save|Record/ }).first().click();
+  await card.getByRole('button', { name: 'Dispatch for delivery' }).click();
+  await card.getByLabel('Courier').fill('The Courier Guy');
+  await card.getByLabel('Tracking number').fill(`TCG${stamp}`);
+  await card.locator('form').getByRole('button', { name: /Dispatch|Save|Record/ }).first().click();
+  await expect(card.getByText(`The Courier Guy, TCG${stamp}`)).toBeVisible();
+
+  // The buyer sees the same steps, with the tracking number, in the shop.
+  await buyer.goto(SHOP);
+  await buyer.getByRole('button', { name: 'Your orders' }).click();
+  const progress = buyer.getByRole('dialog').getByRole('list', { name: 'Progress' }).first();
+  await expect(progress).toContainText(`TCG${stamp}`);
+  await expect(progress.locator('li[aria-current="step"]')).toContainText(/Delivered|Received/);
+});

@@ -57,10 +57,13 @@ export default function MaisonPage() {
   // Back from the payment provider's checkout (?payment=<id>): wait until the API has the outcome, then show the order
   // as it now stands. Nothing is shown as paid until the API says it is.
   const api = useApi();
+  // Read once, when the page is first shown: the effect below can run more than once (React does so on purpose in
+  // development), and the address is tidied after the first run.
+  const [returnedFrom] = useState(() => (typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('payment')));
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get('payment');
+    const id = returnedFrom;
     if (!id) return;
-    window.history.replaceState(null, '', window.location.pathname);
+    if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
     let stopped = false, tries = 0;
     const check = async () => {
       try {
@@ -75,7 +78,7 @@ export default function MaisonPage() {
     void check();
     return () => { stopped = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api]);
+  }, [api, returnedFrom]);
 
   useEffect(() => {
     if (!sheet) return;
