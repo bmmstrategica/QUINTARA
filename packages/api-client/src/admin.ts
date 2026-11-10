@@ -162,7 +162,8 @@ export interface AdminApi {
   resetTwoFactor(userId: string, reason: string): Promise<void>;
   listApplications(status?: ApplicationStatus): Promise<StaffApplication[]>;
   reviewApplication(id: string, status: 'under_review' | 'interview' | 'waitlisted' | 'declined', note?: string): Promise<void>;
-  approveApplication(id: string, tierId: string): Promise<void>;
+  /** Approves with a tier; a discount on the fee (an amount in minor units, or a percentage) needs the finance permission. */
+  approveApplication(id: string, tierId: string, discount?: { kind: 'amount' | 'percent'; value: number; reason: string }): Promise<void>;
   listTiers(): Promise<StaffTier[]>;
   listApplicationQuestions(): Promise<ApplicationQuestions>;
   updateBuiltinQuestion(key: BuiltinQuestionKey, input: BuiltinQuestionInput): Promise<ApplicationQuestions>;
@@ -302,7 +303,7 @@ export function createAdminApi(options: HttpApiOptions): AdminApi {
     resetTwoFactor: (userId, reason) => request('POST', `/admin/v1/users/${encodeURIComponent(userId)}/two-factor/reset`, { reason }),
     listApplications: (status) => request('GET', '/admin/v1/applications' + queryString({ status })),
     reviewApplication: (applicationId, status, note) => request('POST', `/admin/v1/applications/${id(applicationId)}/review`, { status, note }),
-    approveApplication: (applicationId, tierId) => request('POST', `/admin/v1/applications/${id(applicationId)}/approve`, { tierId }),
+    approveApplication: (applicationId, tierId, discount) => request('POST', `/admin/v1/applications/${id(applicationId)}/approve`, { tierId, discount }),
     listTiers: () => request('GET', '/admin/v1/tiers'),
     listApplicationQuestions: () => request('GET', '/admin/v1/application/questions'),
     updateBuiltinQuestion: (key, input) => request('PUT', `/admin/v1/application/questions/builtin/${encodeURIComponent(key)}`, input),

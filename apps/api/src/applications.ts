@@ -12,12 +12,16 @@ function toApplication(row: Row): Application {
     status: row.status as Application['status'],
     data: { ...EMPTY_APPLICATION, ...(row.data as Partial<ApplicationData>) },
     offeredTierName: (row.tier_name as string | null) ?? null,
+    fee: row.tier_name ? {
+      priceMinor: Number(row.price_minor), discountMinor: Number(row.discount_minor), dueMinor: Math.max(0, Number(row.price_minor) - Number(row.discount_minor)),
+      currency: String(row.currency_code).trim(), discountReason: (row.discount_reason as string | null) ?? null,
+    } : null,
     submittedAt: row.submitted_at ? new Date(row.submitted_at as string).toISOString() : null,
   };
 }
 
 const SELECT_APPLICATION = `
-  SELECT a.id, a.status, a.data, a.submitted_at, t.name AS tier_name
+  SELECT a.id, a.status, a.data, a.submitted_at, a.discount_minor, a.discount_reason, t.name AS tier_name, t.price_minor, t.currency_code
     FROM membership_applications a LEFT JOIN membership_tiers t ON t.id = a.offered_tier_id`;
 
 async function findOpen(db: Queryable, userId: string): Promise<Row | undefined> {

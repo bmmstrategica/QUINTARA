@@ -1078,7 +1078,7 @@ export function createMockApi(options: MockApiOptions = {}): QuintaraApi {
     saveApplicationDraft: (data: ApplicationData) =>
       call(() => {
         if (state.application && state.application.status !== 'draft') throw new ApiError('conflict', 'This application has already been sent.');
-        state.application = { id: state.application?.id ?? 'app-1', status: 'draft', data, offeredTierName: null, submittedAt: null };
+        state.application = { id: state.application?.id ?? 'app-1', status: 'draft', data, offeredTierName: null, fee: null, submittedAt: null };
         return state.application;
       }),
 
@@ -1088,7 +1088,7 @@ export function createMockApi(options: MockApiOptions = {}): QuintaraApi {
         const parsed = applicationSchema.safeParse(data);
         if (!parsed.success) throw validationError(parsed.error.issues);
         if (!MOCK_PLANS.some((p) => p.id === parsed.data.planId && p.residency === parsed.data.residency)) throw validationError([{ path: ['planId'], message: 'Choose the membership you are applying for' }]);
-        state.application = { id: state.application?.id ?? 'app-1', status: 'submitted', data: parsed.data, offeredTierName: null, submittedAt: new Date().toISOString() };
+        state.application = { id: state.application?.id ?? 'app-1', status: 'submitted', data: parsed.data, offeredTierName: null, fee: null, submittedAt: new Date().toISOString() };
         return state.application;
       }),
 

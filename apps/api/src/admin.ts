@@ -1,11 +1,11 @@
 /** Staff operations. Every function starts with a staff permission check and ends with an audit entry. */
-import { ADMISSIONS, APPLICATION_APPROVED_MESSAGE, EMPTY_APPLICATION, RESIDENCIES } from '@quintara/domain';
+import { ADMISSIONS, APPLICATION_APPROVED_MESSAGE, EMPTY_APPLICATION, RESIDENCIES, staffCan } from '@quintara/domain';
 import type { ApplicationData, Experience } from '@quintara/domain';
 import { z } from 'zod';
 import { audit, requireStaff } from './context.ts';
 import type { RequestContext } from './context.ts';
 import type { Db, Queryable } from './db.ts';
-import { conflict, HttpError, notFound, validation } from './errors.ts';
+import { conflict, forbidden, HttpError, notFound, validation } from './errors.ts';
 import { SELECT_EXPERIENCE_ALL, toExperience } from './experiences.ts';
 import { activateApplication } from './membership.ts';
 import { eraseAccount } from './privacy.ts';
@@ -54,19 +54,38 @@ export async function reviewApplication(db: Db, ctx: RequestContext, id: string,
   });
 }
 
+const approvalSchema = z.object({
+  tierId: uuid,
+  /** A discount the committee grants on this applicant's fee (needs the finance permission). */
+  discount: z.object({
+    kind: z.enum(['amount', 'percent']),
+    value: z.number().positive(),
+    reason: z.string().trim().min(3, 'Say why the discount is given.').max(200),
+  }).optional(),
+});
+
 export async function approveApplication(db: Db, ctx: RequestContext, id: string, body: unknown): Promise<void> {
   const staffId = requireStaff(ctx, 'admin.applications.review');
-  const { tierId } = parse(z.object({ tierId: uuid }), body);
+  const { tierId, discount } = parse(approvalSchema, body);
+  if (discount && !staffCan(ctx.staffRoles, 'admin.finance.manage')) throw forbidden('Discounts are granted by finance. Approve without one, or ask a Finance Manager.');
   await db.tx(async (tx) => {
     const rows = isUuid(id) ? await tx.query<{ status: string; market_id: string; user_id: string }>('SELECT status, market_id, user_id FROM membership_applications WHERE id = $1 FOR UPDATE', [id]) : [];
     if (!rows[0]) throw notFound('This application does not exist.');
     if (!REVIEWABLE.includes(rows[0].status)) throw conflict('This application has already been decided.');
     const tier = (await tx.query<{ price_minor: string }>('SELECT price_minor FROM membership_tiers WHERE id = $1 AND market_id = $2 AND is_active', [tierId, rows[0].market_id]))[0];
     if (!tier) throw new HttpError(422, 'Choose a tier from this market.', { tierId: 'Choose a tier from this market' });
-    await tx.query(`UPDATE membership_applications SET status = 'payment_pending', offered_tier_id = $2, reviewed_by = $3, decided_at = now(), updated_at = now() WHERE id = $1`, [id, tierId, staffId]);
-    await audit(tx, staffId, 'application.approved', 'membership_application', id, { tierId });
-    // A complimentary tier has nothing to pay, so the membership starts at once.
-    if (Number(tier.price_minor) === 0) await activateApplication(tx, id, staffId);
+    const price = Number(tier.price_minor);
+    let discountMinor = 0;
+    if (discount) {
+      if (discount.kind === 'percent' && discount.value > 100) throw new HttpError(422, 'A discount cannot be more than 100%.', { discount: 'At most 100%' });
+      discountMinor = discount.kind === 'percent' ? Math.round((price * discount.value) / 100) : Math.round(discount.value);
+      if (discountMinor > price) throw new HttpError(422, 'A discount cannot be more than the fee.', { discount: 'More than the fee' });
+    }
+    await tx.query(`UPDATE membership_applications SET status = 'payment_pending', offered_tier_id = $2, reviewed_by = $3, decided_at = now(), updated_at = now(), discount_minor = $4, discount_reason = $5 WHERE id = $1`,
+      [id, tierId, staffId, discountMinor, discount?.reason ?? null]);
+    await audit(tx, staffId, 'application.approved', 'membership_application', id, { tierId, discountMinor, discountReason: discount?.reason ?? null });
+    // Nothing to pay (a complimentary tier, or a discount of the whole fee): the membership starts at once.
+    if (price - discountMinor === 0) await activateApplication(tx, id, staffId);
     else await notify(tx, rows[0].user_id, 'membership_update', APPLICATION_APPROVED_MESSAGE);
   });
 }

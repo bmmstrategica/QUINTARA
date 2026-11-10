@@ -290,6 +290,15 @@ function ApplicationStatusView({ application, onChanged }: { application: Applic
       <div>
         <h2>Your application</h2>
         <p className="lede" style={{ marginTop: '1rem' }}>{messages[application.status]}</p>
+        {application.status === 'payment_pending' && application.fee ? (
+          <div className="facts" style={{ marginBottom: '1rem' }}>
+            {application.fee.discountMinor > 0 ? <>
+              <div>Membership fee: {formatMoney(application.fee.priceMinor, application.fee.currency)}</div>
+              <div>Discount from the committee: {formatMoney(application.fee.discountMinor, application.fee.currency)}{application.fee.discountReason ? ` (${application.fee.discountReason})` : ''}</div>
+            </> : null}
+            <div>To pay: <strong>{formatMoney(application.fee.dueMinor, application.fee.currency)}</strong></div>
+          </div>
+        ) : null}
         <ActionError error={pay.error} />
         <div className="row">
           {application.status === 'payment_pending' ? (

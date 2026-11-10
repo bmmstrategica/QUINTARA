@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { StaffApplication, StaffTier } from '@quintara/api-client';
 import { APPLICATION_STATUS_LABEL, formatHandle, SOCIAL_PLATFORM_LABEL, socialProfileUrl } from '@quintara/domain';
 import type { CustomQuestion } from '@quintara/domain';
-import { fmtMoney, Loaded, useAdmin, useLoad, useRun } from '@/lib/admin';
+import { fmtMoney, Loaded, useAdmin, useCan, useLoad, useRun } from '@/lib/admin';
 
 const OPEN = ['submitted', 'under_review', 'interview', 'waitlisted'];
 
@@ -31,6 +31,11 @@ function ApplicationCard({ application: a, tiers, questions, onChanged }: { appl
   const { run, pending, error } = useRun();
   // The membership the applicant asked for is offered unless staff choose another.
   const [tierId, setTierId] = useState(a.requestedTier && tiers.some((t) => t.id === a.requestedTier!.id) ? a.requestedTier.id : tiers[0]?.id ?? '');
+  // A discount on the fee, granted by finance when approving.
+  const canDiscount = useCan('admin.finance.manage');
+  const [discountKind, setDiscountKind] = useState<'none' | 'percent' | 'amount'>('none');
+  const [discountValue, setDiscountValue] = useState('');
+  const [discountReason, setDiscountReason] = useState('');
   const answers = Object.entries(a.data.answers ?? {}).filter(([, value]) => (Array.isArray(value) ? value.length : String(value).trim()));
   const open = OPEN.includes(a.status);
   const review = (status: 'under_review' | 'interview' | 'waitlisted' | 'declined') => run(() => api.reviewApplication(a.id, status), onChanged);
@@ -68,7 +73,22 @@ function ApplicationCard({ application: a, tiers, questions, onChanged }: { appl
             <select className="small" aria-label="Tier to offer" value={tierId} onChange={(event) => setTierId(event.target.value)}>
               {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}, {fmtMoney(t.priceMinor, t.currency)}{t.id === a.requestedTier?.id ? ' (applied for)' : ''}</option>)}
             </select>
-            <button className="btn" disabled={pending || !tierId} onClick={() => { const t = tiers.find((x) => x.id === tierId); if (window.confirm(`Approve ${a.data.fullName} for ${t?.name ?? 'this membership'}? They are asked to proceed with payment.`)) void run(() => api.approveApplication(a.id, tierId), onChanged); }}>Approve</button>
+            {canDiscount ? (
+              <select className="small" aria-label="Discount" value={discountKind} onChange={(event) => setDiscountKind(event.target.value as typeof discountKind)}>
+                <option value="none">No discount</option><option value="percent">Discount, %</option><option value="amount">Discount, amount</option>
+              </select>
+            ) : null}
+            {discountKind !== 'none' ? <>
+              <input className="small" type="number" min={1} step="1" aria-label={discountKind === 'percent' ? 'Discount percentage' : 'Discount amount'} placeholder={discountKind === 'percent' ? '%' : 'Amount'} value={discountValue} onChange={(event) => setDiscountValue(event.target.value)} style={{ width: 110 }} />
+              <input className="small" aria-label="Reason for the discount" placeholder="Reason (recorded)" maxLength={200} value={discountReason} onChange={(event) => setDiscountReason(event.target.value)} />
+            </> : null}
+            <button className="btn" disabled={pending || !tierId || (discountKind !== 'none' && (!(Number(discountValue) > 0) || discountReason.trim().length < 3))} onClick={() => {
+              const t = tiers.find((x) => x.id === tierId);
+              const value = Number(discountValue);
+              const discount = discountKind === 'none' ? undefined : { kind: discountKind, value: discountKind === 'amount' ? Math.round(value * 100) : value, reason: discountReason.trim() };
+              const said = !discount ? '' : discountKind === 'percent' ? ` with a ${value}% discount` : ` with a discount of ${fmtMoney(discount.value, t?.currency ?? 'ZAR')}`;
+              if (window.confirm(`Approve ${a.data.fullName} for ${t?.name ?? 'this membership'}${said}? They are asked to proceed with payment.`)) void run(() => api.approveApplication(a.id, tierId, discount), onChanged);
+            }}>Approve</button>
           </div>
         </>
       ) : a.status === 'payment_pending' ? <p className="muted" style={{ fontSize: 13 }}>Waiting for the applicant to pay.</p> : null}

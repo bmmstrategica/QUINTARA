@@ -1127,6 +1127,8 @@ export interface Application {
   status: ApplicationStatus;
   data: ApplicationData;
   offeredTierName: string | null;
+  /** Once approved: the plan's fee, any discount the committee granted, and what is due. */
+  fee: { priceMinor: number; discountMinor: number; dueMinor: number; currency: string; discountReason: string | null } | null;
   submittedAt: string | null;
 }
 

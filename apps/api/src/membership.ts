@@ -44,8 +44,8 @@ export async function activateApplication(tx: Queryable, applicationId: string, 
 export async function prepareMembershipPayment(db: Db, ctx: RequestContext, provider: PaymentProvider, idempotencyKey?: string): Promise<PreparedPayment & { alreadyPaid: boolean }> {
   if (!ctx.userId) throw unauthenticated();
   const userId = ctx.userId;
-  const rows = await db.query<{ id: string; status: string; market_id: string; price_minor: string; currency_code: string; tier_name: string }>(
-    `SELECT a.id, a.status, a.market_id, t.price_minor, t.currency_code, t.name AS tier_name
+  const rows = await db.query<{ id: string; status: string; market_id: string; price_minor: string; discount_minor: string; currency_code: string; tier_name: string }>(
+    `SELECT a.id, a.status, a.market_id, t.price_minor, a.discount_minor, t.currency_code, t.name AS tier_name
        FROM membership_applications a JOIN membership_tiers t ON t.id = a.offered_tier_id
       WHERE a.user_id = $1 ORDER BY a.created_at DESC LIMIT 1`, [userId]);
   const application = rows[0];
@@ -54,7 +54,8 @@ export async function prepareMembershipPayment(db: Db, ctx: RequestContext, prov
   // double click or a second tab can never charge twice. It moves on only after a declined attempt.
   const failed = Number((await db.query<{ n: string }>(`SELECT count(*) AS n FROM payments WHERE application_id = $1 AND status = 'failed'`, [application.id]))[0]!.n);
   const key = idempotencyKey?.slice(0, 200) || `membership:${application.id}:${failed}`;
-  const amount = Number(application.price_minor), currency = application.currency_code.trim();
+  // The plan's fee, less any discount the committee granted when approving.
+  const amount = Number(application.price_minor) - Number(application.discount_minor), currency = application.currency_code.trim();
   const payment = (await db.query<{ id: string; status: string; application_id: string | null }>(
     `INSERT INTO payments (user_id, market_id, purpose, application_id, amount_minor, currency_code, provider, idempotency_key)
      VALUES ($1, $2, 'membership', $3, $4, $5, $6, $7)
