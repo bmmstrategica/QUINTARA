@@ -218,6 +218,12 @@ function Chat({ initial, guest = false, onTurn }: { initial: QeraThread; guest?:
   const bookings = useResource((api) => (guest ? Promise.resolve([]) : api.listPartnerBookings()), [thread]);
   const cancelBooking = useAction(async (api, id: string) => { await api.cancelPartnerBooking(id); return true; });
   const busy = send.pending || decide.pending;
+  // A thumbs up or down on a reply, seen only by Quintara to improve QÉRA.
+  const rate = useAction(async (api, id: string, helpful: boolean) => { await api.rateQeraReply(id, helpful); return { id, helpful }; });
+  async function rateReply(id: string, helpful: boolean) {
+    const done = await rate.run(id, helpful);
+    if (done) setThread((t) => ({ ...t, messages: t.messages.map((m) => (m.id === done.id ? { ...m, feedback: done.helpful } : m)) }));
+  }
 
   async function submit(message: string) {
     const trimmed = message.trim();
@@ -237,7 +243,17 @@ function Chat({ initial, guest = false, onTurn }: { initial: QeraThread; guest?:
       {usage ? <GuestAllowance usage={exhausted ? { ...usage, exhausted: true, usedSeconds: usage.limitSeconds } : usage} onUsage={setUsage} /> : null}
       <div className="thread" role="log" aria-live="polite" aria-label="Conversation with QÉRA" style={{ maxWidth: 'none' }}>
         {thread.messages.length === 0 ? <div className="bubble">{guest ? QERA_GUEST_HELP : QERA_HELP}</div> : null}
-        {thread.messages.map((m) => <div key={m.id} className={`bubble ${m.role === 'member' ? 'mine' : ''}`}>{m.text}{m.via === 'whatsapp' ? <small className="via">On WhatsApp</small> : null}</div>)}
+        {thread.messages.map((m) => (
+          <div key={m.id} className={`bubble ${m.role === 'member' ? 'mine' : ''}`}>
+            {m.text}{m.via === 'whatsapp' ? <small className="via">On WhatsApp</small> : null}
+            {m.role === 'qera' ? (
+              <span className="rate" role="group" aria-label="Was this helpful?">
+                <button type="button" aria-pressed={m.feedback === true} disabled={rate.pending} onClick={() => void rateReply(m.id, true)}>Helpful</button>
+                <button type="button" aria-pressed={m.feedback === false} disabled={rate.pending} onClick={() => void rateReply(m.id, false)}>Not helpful</button>
+              </span>
+            ) : null}
+          </div>
+        ))}
         {busy ? <div className="bubble muted" role="status">One moment</div> : null}
         <div ref={end} />
       </div>

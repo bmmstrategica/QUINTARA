@@ -202,12 +202,22 @@ export function Choice<T extends string>({ label, options, value, onChange }: { 
   );
 }
 
-export function Bubble({ mine, body, meta }: { mine: boolean; body: string; meta: string }) {
+/** A message. With `onRate`, a reply also offers "Helpful" and "Not helpful"; `rated` is the member's answer so far. */
+export function Bubble({ mine, body, meta, rated, onRate }: { mine: boolean; body: string; meta: string; rated?: boolean; onRate?: (helpful: boolean) => void }) {
   const { color, space, radius } = useTheme();
   return (
     <View style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '85%', padding: space.sm + 4, borderRadius: radius.md * 2, borderWidth: 1, borderColor: mine ? color.accent : color.line, backgroundColor: color.surface }}>
       <Body>{body}</Body>
       <Muted style={{ fontSize: 12 }}>{meta}</Muted>
+      {onRate ? (
+        <View style={{ flexDirection: 'row', gap: space.md, marginTop: 6 }} accessibilityLabel="Was this helpful?">
+          {([[true, 'Helpful'], [false, 'Not helpful']] as const).map(([value, label]) => (
+            <Pressable key={label} accessibilityRole="button" accessibilityState={{ selected: rated === value }} hitSlop={8} onPress={() => onRate(value)}>
+              <Text style={{ fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: rated === value ? color.ink : color.muted, opacity: rated === value ? 1 : 0.6, textDecorationLine: rated === value ? 'underline' : 'none' }}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
