@@ -50,14 +50,14 @@ export async function getRequest(db: Queryable, ctx: RequestContext, id: string)
   return toRequest(row, (await messagesFor(db, [id])).get(id) ?? []);
 }
 
-export async function createRequest(db: Db, ctx: RequestContext, body: unknown): Promise<ConciergeRequest> {
+export async function createRequest(db: Db, ctx: RequestContext, body: unknown, source: 'member' | 'qera' = 'member'): Promise<ConciergeRequest> {
   const session = requireMember(ctx, 'concierge.request');
   const parsed = conciergeRequestSchema.safeParse(body);
   if (!parsed.success) throw validation(parsed.error.issues);
   const input = parsed.data;
   const id = (await db.query<{ id: string }>(
-    'INSERT INTO concierge_requests (member_id, market_id, category, subject, details, needed_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-    [session.memberId, ctx.marketId, input.category, input.subject, input.details, input.neededBy ?? null]))[0]!.id;
+    'INSERT INTO concierge_requests (member_id, market_id, category, subject, details, needed_by, source) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
+    [session.memberId, ctx.marketId, input.category, input.subject, input.details, input.neededBy ?? null, source]))[0]!.id;
   await audit(db, session.userId, 'concierge.requested', 'concierge_request', id, { category: input.category });
   return getRequest(db, ctx, id);
 }

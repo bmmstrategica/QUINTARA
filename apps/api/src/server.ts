@@ -20,6 +20,7 @@ import { httpCalendarFetcher, syncDueCalendars } from './calendar.ts';
 import { seed } from './seed.ts';
 import { CloudApiWhatsAppProvider, MockWhatsAppProvider } from './whatsapp.ts';
 import type { WhatsAppConfig } from './whatsapp.ts';
+import { providersFromEnv } from './qera-gateway/providers.ts';
 
 const production = process.env.NODE_ENV === 'production';
 const url = process.env.DATABASE_URL;
@@ -103,6 +104,9 @@ const app = await buildApp(db, {
   secureCookies: production,
   payments,
   push,
+  // QÉRA's hosted models: ANTHROPIC_API_KEY, OPENAI_API_KEY and/or GEMINI_API_KEY. They are used only once an
+  // administrator turns hosted models on in the QÉRA Control Centre; until then QÉRA runs on its built-in rules.
+  llmProviders: providersFromEnv(process.env),
   // Replace with the real mail service's adapter (see email.ts). The stand-in sends nothing.
   email,
   webUrl,
