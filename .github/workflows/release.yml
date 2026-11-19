@@ -142,6 +142,8 @@ jobs:
           WHATSAPP_BUSINESS_NUMBER: ${{ vars.WHATSAPP_BUSINESS_NUMBER }}
           PAYMENTS_TEST_SECRET: ${{ secrets.PAYMENTS_TEST_SECRET }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           EXPO_ACCESS_TOKEN: ${{ secrets.EXPO_ACCESS_TOKEN }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
           WEB_ORIGINS: ${{ vars.WEB_ORIGINS }}

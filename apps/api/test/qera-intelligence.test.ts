@@ -188,6 +188,11 @@ describe('model gateway', () => {
     assert.deepEqual(g, { toolCall: { name: 'search', args: { query: 'g' } }, inputTokens: 9, outputTokens: 4 });
     // Gemini is not sent the JSON Schema keys it rejects, and the key travels in a header, never in the URL.
     assert.ok(!JSON.stringify(seen[2]!.body.tools).includes('additionalProperties') && !seen[2]!.url.includes('key='));
+    // A replayed call carries a thought signature, which Gemini 3 models require.
+    assert.ok(seen[2]!.body.contents[1].parts[0].thoughtSignature);
+    // An answer cut off by the token limit is not used, whichever provider gave it.
+    await assert.rejects(new OpenAIProvider('k', fake({ choices: [{ finish_reason: 'length', message: { content: 'Half a sen' } }] })).complete(req), ProviderError);
+    await assert.rejects(new GeminiProvider('k', fake({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: 'Half' }] } }] })).complete(req), ProviderError);
   });
 });
 

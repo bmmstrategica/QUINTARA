@@ -94,6 +94,7 @@ export class OpenAIProvider implements LlmProvider {
       model: r.model, max_completion_tokens: r.maxTokens, messages,
       tools: r.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
     }, r.timeoutMs);
+    if (out?.choices?.[0]?.finish_reason === 'length') throw new ProviderError(this.name, null, 'the answer was cut off by the token limit');
     const message = out?.choices?.[0]?.message ?? {};
     const call = message.tool_calls?.[0]?.function;
     let args: Record<string, unknown> = {};
@@ -114,19 +115,25 @@ export class GeminiProvider implements LlmProvider {
     const contents = r.messages.map((m) => {
       if (m.role === 'user') return { role: 'user', parts: [{ text: m.text }] };
       if (m.role === 'tool') return { role: 'user', parts: [{ functionResponse: { name: m.name, response: { content: m.result } } }] };
-      return { role: 'model', parts: [...(m.text ? [{ text: m.text }] : []), ...(m.toolCall ? [{ functionCall: { name: m.toolCall.name, args: m.toolCall.args } }] : [])] };
+      // Gemini 3 models refuse a replayed function call without the thought signature that came with it. The gateway
+      // rebuilds calls from what the tools did, not from the provider's reply, so it sends the value Google documents
+      // for calls whose signature was not kept.
+      return { role: 'model', parts: [...(m.text ? [{ text: m.text }] : []), ...(m.toolCall ? [{ functionCall: { name: m.toolCall.name, args: m.toolCall.args }, thoughtSignature: GEMINI_UNSIGNED }] : [])] };
     });
     const out = await post(this.name, this.fetcher, `${this.baseUrl}/v1beta/models/${encodeURIComponent(r.model)}:generateContent`, { 'x-goog-api-key': this.apiKey }, {
       systemInstruction: { parts: [{ text: r.system }] }, contents,
       tools: [{ functionDeclarations: r.tools.map((t) => ({ name: t.name, description: t.description, parameters: geminiSchema(t.parameters) })) }],
       generationConfig: { maxOutputTokens: r.maxTokens },
     }, r.timeoutMs);
+    if (out?.candidates?.[0]?.finishReason === 'MAX_TOKENS') throw new ProviderError(this.name, null, 'the answer was cut off by the token limit');
     const parts: any[] = out?.candidates?.[0]?.content?.parts ?? [];
     const fn = parts.find((p) => p.functionCall)?.functionCall;
     const text = parts.filter((p) => typeof p.text === 'string').map((p) => p.text).join('\n').trim();
     return { ...(fn ? { toolCall: { name: String(fn.name), args: (fn.args ?? {}) as Record<string, unknown> } } : {}), ...(text ? { text } : {}), inputTokens: Number(out?.usageMetadata?.promptTokenCount ?? 0), outputTokens: Number(out?.usageMetadata?.candidatesTokenCount ?? 0) };
   }
 }
+
+const GEMINI_UNSIGNED = 'skip_thought_signature_validator';
 
 /** Gemini accepts a subset of JSON Schema: drop the keys it rejects. */
 function geminiSchema(schema: unknown): unknown {
