@@ -54,7 +54,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .filter:hover { color: var(--q-ink); border-color: var(--q-muted); }
 .filter.on { background: var(--q-accent); border-color: var(--q-accent); color: var(--q-bg); }
 /* Locked (for members, or for an account): the lock and a dashed edge say so. Not faded: faded text fails contrast. */
-.filter.locked { border-style: dashed; }
+.filter.locked { border-style: dashed; position: relative; }  /* keeps its hidden "(for members)" text inside the chip, not widening the page */
 /* Filters on a page: a row of chips. The chosen one is filled; counts follow the label. */
 .chips-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; margin: 0 0 1.4rem; }
 .chips-row .chips-row { margin: 0; }

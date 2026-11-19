@@ -9,6 +9,8 @@ const WEB = 'http://localhost:3100';
 const NOW = new Date('2026-11-09T08:00:00Z');
 const VIEWPORTS = { desktop: { width: 1280, height: 800 }, phone: { width: 390, height: 844 } } as const;
 const VISITOR = ['/', '/experiences', '/sign-in', '/apply', '/boutique'];
+/** Pages checked for width only (no screenshot): their row of filters holds locked chips. */
+const WIDTH_ONLY = ['/lifestyle', '/members', '/tv', '/search', '/join'];
 const MEMBER = ['/', '/experiences', '/bookings', '/profile', '/concierge'];
 
 async function prepare(page: Page, theme: 'dark' | 'light') {
@@ -39,7 +41,14 @@ for (const theme of ['dark', 'light'] as const) {
       for (const path of VISITOR) {
         await page.goto(WEB + path);
         await settle(page);
+        // Nothing may be wider than the screen (no sideways scrolling on a phone).
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
         await expect(page).toHaveScreenshot(`visitor-${slug(path)}-${theme}-${size}.png`, { fullPage: true });
+      }
+      for (const path of WIDTH_ONLY) {
+        await page.goto(WEB + path);
+        await settle(page);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth), path).toBeLessThanOrEqual(viewport.width);
       }
       await page.close();
     });
