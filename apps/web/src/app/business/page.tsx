@@ -1,22 +1,28 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useAction, usePermission, useResource } from '@quintara/app-core';
 import { BUSINESS_ROLE_LABEL, BUSINESS_ROLES, INTRODUCTION_STATUS_LABEL, LISTING_KIND_LABEL, LISTING_KINDS, listingInputSchema } from '@quintara/domain';
 import type { BusinessListing, BusinessRole, Introduction, ListingInput, ListingKind } from '@quintara/domain';
 import { QuintaraBusiness } from '@/components/relationship-manager';
 import { ActionError, ResourceView } from '@/components/states';
 import { useSection } from '@/components/section-copy';
+import { FilterChips, useQueryFilter } from '@/components/filter-chips';
 
 const LISTING_STATUS: Record<BusinessListing['status'], string> = { pending: 'With the team for review', published: 'Published', declined: 'Not published', closed: 'Closed' };
 
 export default function BusinessPage() {
+  return <Suspense><Business /></Suspense>;
+}
+
+function Business() {
   const listings = useResource((api) => api.listBusinessListings());
   const introductions = useResource((api) => api.listIntroductions());
   const canPost = usePermission('business.post');
   const intro = useSection('business');
   const reload = () => { listings.reload(); introductions.reload(); };
+  const [kind, setKind] = useQueryFilter('kind', LISTING_KINDS);
   return (
     <>
       <div className="head">
@@ -40,7 +46,13 @@ export default function BusinessPage() {
 
       <h3 style={{ fontStyle: 'italic', marginBottom: '0.6rem' }}>From members</h3>
       <ResourceView resource={listings} isEmpty={(list) => list.length === 0} empty={<p className="muted">Nothing is addressed to your role at the moment.</p>}>
-        {(list) => list.map((listing) => <ListingItem key={listing.id} listing={listing} onChanged={reload} />)}
+        {(list) => {
+          const shown = list.filter((l) => !kind || l.kind === kind);
+          return <>
+            <FilterChips label="Kind of listing" value={kind} onChange={setKind} options={[['', 'All', list.length], ...LISTING_KINDS.filter((k) => list.some((l) => l.kind === k)).map((k) => [k, LISTING_KIND_LABEL[k], list.filter((l) => l.kind === k).length] as const)]} />
+            {shown.length ? shown.map((listing) => <ListingItem key={listing.id} listing={listing} onChanged={reload} />) : <p className="muted">Nothing of this kind at the moment.</p>}
+          </>;
+        }}
       </ResourceView>
 
       {canPost ? <NewListing onCreated={reload} /> : <p className="muted" style={{ marginTop: '2rem' }}>Posting is open to members the team has recognised as a founder, investor, creative or executive. Ask the concierge desk if that should include you.</p>}

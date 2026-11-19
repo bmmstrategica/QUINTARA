@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 import { useAction, usePermission, useResource } from '@quintara/app-core';
 import { deliveryFee, formatMoney, ORDER_STAGE_LABEL, ORDER_STAGES, ORDER_STATUS_LABEL, orderInputSchema, orderStageIndex } from '@quintara/domain';
 import type { Order, OrderInput, Product } from '@quintara/domain';
-import { ActionError, Body, Button, Choice, confirmThen, Divider, Field, Heading, Muted, ResourceView, Row, Screen, Tag, Title } from '@/components/ui';
+import { ActionError, Body, Button, Chips, Choice, confirmThen, Divider, Field, Heading, Muted, ResourceView, Row, Screen, Tag, Title } from '@/components/ui';
 import { useTheme } from '@/theme';
 import { useSection } from '@/components/section-copy';
 import { Photo } from '@/components/photo';
@@ -16,6 +16,7 @@ export default function BoutiqueScreen() {
   const canShop = usePermission('boutique.shop');
   const isMember = usePermission('directory.view');
   const products = useResource((api) => api.listProducts());
+  const [category, setCategory] = useState('');
   const orders = useResource((api) => (canShop ? api.listOrders() : Promise.resolve([])), [canShop]);
   const [bag, setBag] = useState<BagLine[]>([]);
   const reload = () => { products.reload(); orders.reload(); };
@@ -28,7 +29,10 @@ export default function BoutiqueScreen() {
       <Title>Maison Quintara</Title>
       <Muted>{shop.description}{isMember ? '' : ' Members pay member prices.'}</Muted>
       <ResourceView resource={products} isEmpty={(list) => list.length === 0} empty={<Muted>The shelves are being filled.</Muted>}>
-        {(list) => list.map((product) => <ProductCard key={product.id} product={product} canShop={canShop} isMember={isMember} onAdd={add} onChanged={products.reload} />)}
+        {(list) => <>
+          <Chips label="Category" value={category} onChange={setCategory} options={[['', 'All pieces', list.length], ...[...new Set(list.map((p) => p.category))].sort().map((c) => [c, c, list.filter((p) => p.category === c).length] as const)]} />
+          {list.filter((p) => !category || p.category === category).map((product) => <ProductCard key={product.id} product={product} canShop={canShop} isMember={isMember} onAdd={add} onChanged={products.reload} />)}
+        </>}
       </ResourceView>
       {canShop ? <Bag isMember={isMember} bag={bag} clear={() => setBag([])} remove={(line) => setBag((lines) => lines.filter((l) => l !== line))} onOrdered={reload} /> : null}
       {canShop ? (

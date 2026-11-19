@@ -2,7 +2,9 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable } from 'react-native';
 import { useAction, useResource } from '@quintara/app-core';
-import { Body, Button, Field, Heading, Muted, ResourceView, Row, Screen, Tag } from '@/components/ui';
+import { BUSINESS_ROLE_LABEL, BUSINESS_ROLES } from '@quintara/domain';
+import type { BusinessRole } from '@quintara/domain';
+import { Body, Button, Chips, Field, Heading, Muted, ResourceView, Row, Screen, Tag } from '@/components/ui';
 import { useTheme } from '@/theme';
 import { useSection } from '@/components/section-copy';
 
@@ -12,17 +14,19 @@ export default function MembersScreen() {
   const { color, space } = useTheme();
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
+  const [role, setRole] = useState<BusinessRole | ''>('');
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  const members = useResource((api) => api.listMembers({ search: debounced }), [debounced]);
+  const members = useResource((api) => api.listMembers({ search: debounced, role: role || undefined }), [debounced, role]);
 
   return (
     <Screen>
       <Muted>{club.description}</Muted>
+      <Chips label="Type of member" value={role} onChange={setRole} options={[['', 'Everyone'], ...BUSINESS_ROLES.map((r) => [r, BUSINESS_ROLE_LABEL[r]] as const)]} />
       <Field label="Search members" value={search} onChangeText={setSearch} placeholder="Name, company, industry or interest" autoCorrect={false} returnKeyType="search" />
       <Suggestions />
       <ResourceView resource={members} isEmpty={(list) => list.length === 0} empty={<Muted>No members match. Try a different search.</Muted>}>

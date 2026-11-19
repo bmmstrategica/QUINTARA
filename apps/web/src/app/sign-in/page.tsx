@@ -37,8 +37,9 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="split">
+    <div className="split centred">
       <div>
+        <img className="auth-mark" src="/quintara-emblem.png" alt="" />
         <h2>Sign in</h2>
         <p className="lede" style={{ marginTop: '1rem' }}>{authMethod === 'code' ? 'Members and guests sign in with their email address and a one-time code we send to it.' : 'Members and guests sign in with their email address.'}</p>
         {authMethod === 'dev' ? <p className="notice">Development build: the email address alone signs you in. In production a one-time code is sent to the address.</p> : null}

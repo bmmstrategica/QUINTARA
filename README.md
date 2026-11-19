@@ -97,6 +97,17 @@ and live delivery of messages. The admin app covers
 applications, members, tiers, payments, experiences, guest lists, check-in, reports and insights; content has no screen yet. The concurrency test runs on a single in-memory
 connection, so repeat it against a real PostgreSQL before relying on it.
 
+## QÉRA, the Chief of Staff
+
+QÉRA runs behind a provider-agnostic model gateway (`apps/api/src/qera-gateway/`): Anthropic, OpenAI and Gemini
+adapters tried in the order set in the admin console's **QÉRA Control Centre**, with the built-in rule-based model as
+the fallback whenever hosted models are off, over budget, over a member's hourly limit or unavailable. The model can
+only ask for tools the member is allowed; every action is a proposal the member confirms. The Control Centre shows the
+dashboard, QÉRA's referrals to the Lifestyle Curator, the knowledge base QÉRA answers from, settings (models, autonomy
+level, budget, escalation amount), versioned prompts, the model call log, and conversations (opened only with a
+recorded reason, with private details hidden). See [docs/QERA_ARCHITECTURE.md](docs/QERA_ARCHITECTURE.md) for the
+architecture, risk register and what remains before hosted models go live.
+
 ## How the apps reach data
 
 Screens depend only on the `QuintaraApi` interface in `packages/api-client`.

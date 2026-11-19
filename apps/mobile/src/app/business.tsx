@@ -2,9 +2,9 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useAction, useResource } from '@quintara/app-core';
-import { BUSINESS_ROLE_LABEL, INTRODUCTION_STATUS_LABEL, LISTING_KIND_LABEL, RELATIONSHIP_MANAGER, RM_NOTICE, RM_TOPIC_LABEL } from '@quintara/domain';
-import type { BusinessListing, BusinessUpdate, Introduction, RmEnquiry, RmTopic } from '@quintara/domain';
-import { ActionError, Body, Bubble, Button, Choice, clock, Composer, confirmThen, Divider, Field, Heading, Muted, ResourceView, Screen, Tag, Title } from '@/components/ui';
+import { BUSINESS_ROLE_LABEL, INTRODUCTION_STATUS_LABEL, LISTING_KIND_LABEL, LISTING_KINDS, RELATIONSHIP_MANAGER, RM_NOTICE, RM_TOPIC_LABEL } from '@quintara/domain';
+import type { BusinessListing, BusinessUpdate, Introduction, ListingKind, RmEnquiry, RmTopic } from '@quintara/domain';
+import { ActionError, Body, Bubble, Button, Chips, Choice, clock, Composer, confirmThen, Divider, Field, Heading, Muted, ResourceView, Screen, Tag, Title } from '@/components/ui';
 import { useTheme } from '@/theme';
 import { useSection } from '@/components/section-copy';
 
@@ -14,6 +14,7 @@ export default function BusinessScreen() {
   const updates = useResource((api) => api.listBusinessUpdates());
   const enquiries = useResource((api) => api.listRmEnquiries());
   const [about, setAbout] = useState<BusinessUpdate | null>(null);
+  const [kind, setKind] = useState<ListingKind | ''>('');
   const intro = useSection('business');
   const manager = useSection('relationship');
   const reload = () => { listings.reload(); introductions.reload(); updates.reload(); enquiries.reload(); };
@@ -46,7 +47,10 @@ export default function BusinessScreen() {
       </ResourceView>
       <Heading>From members</Heading>
       <ResourceView resource={listings} isEmpty={(list) => list.length === 0} empty={<Muted>Nothing is addressed to your role at the moment.</Muted>}>
-        {(list) => list.map((l) => <ListingCard key={l.id} listing={l} onChanged={reload} />)}
+        {(list) => <>
+          <Chips label="Kind of listing" value={kind} onChange={setKind} options={[['', 'All', list.length], ...LISTING_KINDS.filter((k) => list.some((l) => l.kind === k)).map((k) => [k, LISTING_KIND_LABEL[k], list.filter((l) => l.kind === k).length] as const)]} />
+          {list.filter((l) => !kind || l.kind === kind).map((l) => <ListingCard key={l.id} listing={l} onChanged={reload} />)}
+        </>}
       </ResourceView>
       <Muted>To add a listing of your own, use the Quintara web app.</Muted>
     </Screen>

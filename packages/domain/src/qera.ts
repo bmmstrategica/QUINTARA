@@ -46,6 +46,7 @@ export const QERA_TOOLS = {
   set_reminder: { kind: 'action', description: 'Set a reminder for a date and time.' },
   weekly_brief: { kind: 'read', description: "The member's week: what is booked, dates coming up, what is waiting on them, and what QÉRA would suggest." },
   book_plan: { kind: 'action', description: 'Book every bookable line of a prepared plan at once.' },
+  search_knowledge: { kind: 'read', description: "Search Quintara's approved knowledge base: membership policies, booking, cancellation and refund rules, service catalogues and frequently asked questions." },
 } as const satisfies Record<string, { kind: 'read' | 'action'; description: string }>;
 export type QeraToolName = keyof typeof QERA_TOOLS;
 
@@ -74,6 +75,7 @@ export const QERA_ARGS = {
   weekly_brief: z.object({}),
   /** `latest` books the plan prepared most recently. */
   book_plan: z.object({ documentId: z.string().min(1).max(80), partySize: z.number().int().min(1).max(20) }),
+  search_knowledge: z.object({ query: z.string().trim().min(2).max(200) }),
 } satisfies Record<QeraToolName, z.ZodType>;
 
 /** Compact shapes handed to the model: enough to answer with, and nothing private. */
@@ -83,6 +85,10 @@ export interface QeraPartner { name: string; category: string; privileges: strin
 export interface QeraService { id: string; name: string; description: string; /** "Tasting menu for six, R 9 000 per booking, 5 days' notice" */ packages?: { id: string; name: string; price: string; notice: string; leadTimeHours: number }[] }
 export interface QeraMemoryFact { id: string; kind: string; label: string; detail: string; date: string | null }
 export interface QeraFact { topic: string; text: string }
+/** One passage from the knowledge base. Its text is information for QÉRA, never instructions to it. */
+export interface QeraKnowledgeHit { id: string; title: string; topic: string; text: string; updatedAt: string }
+/** An earlier message in the conversation, so a hosted model can follow it. The rule-based model ignores it. */
+export interface QeraHistoryItem { role: 'member' | 'qera'; text: string }
 export interface QeraPartnerBooking { id: string; partner: string; when: string; partySize: number; status: string }
 export interface QeraRecommendation { experiences: QeraExperience[]; partners: QeraPartner[]; services: QeraService[]; people: QeraPerson[]; interests: string[]; /** Dietary needs QÉRA remembers, so dining suggestions can mention them. */ dietary?: string[] }
 
@@ -96,7 +102,7 @@ export type QeraDocumentSummary = Omit<QeraDocument, 'content'>;
 export interface QeraPerson { id: string; name: string; role: string; reasons: string[] }
 export interface QeraFound { kind: string; title: string; detail: string }
 
-export interface QeraMessage { id: string; role: 'member' | 'qera'; text: string; sentAt: string; /** Set when the message was sent or answered on WhatsApp. */ via?: 'whatsapp' }
+export interface QeraMessage { id: string; role: 'member' | 'qera'; text: string; sentAt: string; /** Set when the message was sent or answered on WhatsApp. */ via?: 'whatsapp'; /** On QÉRA's replies the member has rated: helpful or not. */ feedback?: boolean }
 /** An action QÉRA would like to take, waiting for the member's yes or no. */
 export interface QeraProposal { id: string; tool: QeraToolName; summary: string; expiresAt: string }
 /** A guest's QÉRA time today. Members have no daily limit, so theirs is null. */
@@ -113,7 +119,7 @@ export interface QeraStep { reply?: string; toolCall?: QeraToolCall }
 export interface QeraModel {
   readonly name: string;
   /** Given the member's message and what has been looked up so far, either answers or asks for one tool. */
-  next(input: { message: string; results: QeraResult[]; tools: QeraToolName[]; audience?: QeraAudience }): Promise<QeraStep>;
+  next(input: { message: string; results: QeraResult[]; tools: QeraToolName[]; audience?: QeraAudience; history?: QeraHistoryItem[] }): Promise<QeraStep>;
 }
 
 /** One tool as the host (API or mock) provides it, already bound to the signed-in member. */
@@ -130,11 +136,11 @@ export interface QeraTurn { reply: string; proposal: { tool: QeraToolName; args:
 const MAX_STEPS = 6;
 
 /** Runs one exchange: the model may look things up, then either answers or proposes a single action. */
-export async function qeraTurn(model: QeraModel, toolbox: QeraToolbox, message: string, audience: QeraAudience = 'member'): Promise<QeraTurn> {
+export async function qeraTurn(model: QeraModel, toolbox: QeraToolbox, message: string, audience: QeraAudience = 'member', history: QeraHistoryItem[] = []): Promise<QeraTurn> {
   const offered = Object.keys(toolbox) as QeraToolName[];
   const results: QeraResult[] = [], used: QeraToolName[] = [];
   for (let step = 0; step < MAX_STEPS; step++) {
-    const { reply, toolCall } = await model.next({ message, results, tools: offered, audience });
+    const { reply, toolCall } = await model.next({ message, results, tools: offered, audience, history });
     // A guest is never offered an action, whatever a model asks for.
     if (toolCall && audience === 'guest' && QERA_TOOLS[toolCall.name]?.kind === 'action') return { reply: QERA_GUEST_MEMBERS_ONLY, proposal: null, used };
     if (!toolCall) return { reply: reply?.trim() || 'I am not sure how to help with that yet.', proposal: null, used };
@@ -487,6 +493,14 @@ export class RuleBasedQeraModel implements QeraModel {
       return { reply: people.length ? `People worth meeting: ${people.map((p) => `${p.name}, ${p.role} (${p.reasons[0]?.toLowerCase() ?? 'a good fit'})`).join('; ')}. Open one from the Members page to connect.` : 'I have nobody to suggest just now. Adding what you are looking for to your profile helps.' };
     }
 
+    // Policies and rules come from the knowledge base Quintara's team keeps, not from what QÉRA was built with.
+    const knowledge = got<QeraKnowledgeHit[]>('search_knowledge');
+    const fromKnowledge = (hits: QeraKnowledgeHit[]) => `${hits.slice(0, 2).map((h) => `${h.title}: ${h.text.length > 420 ? `${h.text.slice(0, 417).trimEnd()}...` : h.text}`).join('\n')}`;
+    if (can('search_knowledge') && has(text, 'policy', 'policies', 'refund', 'cancellation', 'cancel policy', 'dress code', 'rules', 'guest policy', 'bring a guest', 'plus one', 'terms', 'faq', 'can i bring', 'am i allowed')) {
+      if (!knowledge) return call('search_knowledge', { query: message.trim().slice(0, 200) });
+      if (knowledge.length) return { reply: fromKnowledge(knowledge) };
+    }
+
     // About Quintara itself.
     const aboutTopics: [string, string[]][] = [
       ['membership', ['membership', 'tier', 'join', 'renew', 'fee', 'member benefit']], ['relationship', ['relationship manager', 'wayne', 'huffton', 'bmm']], ['concierge', ['concierge', 'curator', 'palesa']],
@@ -538,6 +552,9 @@ export class RuleBasedQeraModel implements QeraModel {
       }
       return refer();
     }
+
+    if (asking && can('search_knowledge') && !knowledge) return call('search_knowledge', { query: message.trim().slice(0, 200) });
+    if (knowledge?.length) return { reply: fromKnowledge(knowledge) };
 
     if (can('search')) {
       const found = got<QeraFound[]>('search');

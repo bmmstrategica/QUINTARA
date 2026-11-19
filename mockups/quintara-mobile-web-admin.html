@@ -528,6 +528,40 @@ progress::-webkit-progress-bar{background:var(--line)}progress::-webkit-progress
 .colm:hover .tipx,.colm:focus .tipx{display:block}
 .tipx div{display:flex;justify-content:space-between;gap:14px;color:var(--muted)}.tipx div span:last-child{color:var(--ivory);font-variant-numeric:tabular-nums}.tipx .t{color:var(--ivory);font-weight:500;margin-bottom:4px;display:block}
 .grp .stk{flex-direction:row;align-items:flex-end;gap:2px;height:100%}.grp .stk i{flex:1;border-radius:4px 4px 0 0}
+
+/* Web app: menu bar at the top right, after the location icon */
+.wbar{position:relative;z-index:6;display:flex;align-items:center;gap:4px;padding:10px 28px;border-bottom:1px solid var(--line);background:var(--bar)}
+.wlogo{display:flex;align-items:center;gap:12px;background:none;border:0;padding:0}.wlogo .m{height:32px;width:auto}.wlogo .w{height:11px;width:auto}
+.wbar .sp{flex:1}
+.wbar .meb .av,.wbar .meb>*{transform:scale(.82)}
+.wbar .citypin{margin-right:6px}
+.wbar .citypin::after{content:"";position:absolute;right:-6px;top:11px;bottom:11px;width:1px;background:var(--line)}
+.wmenu{display:flex;align-items:stretch;gap:2px;margin-left:8px}
+.wgrp{position:relative}
+.wh{display:flex;align-items:center;gap:7px;height:42px;padding:0 13px;background:none;border:0;color:var(--muted);font:400 11.5px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;white-space:nowrap;position:relative;transition:color .15s}
+.wh .car{width:9px;height:6px;opacity:.6;transition:transform .2s}
+.wgrp:hover .wh,.wgrp:focus-within .wh,.wgrp.cur .wh{color:var(--ivory)}
+.wgrp.cur .wh::after{content:"";position:absolute;left:13px;right:13px;bottom:2px;height:1px;background:var(--champ)}
+.wgrp:hover .car,.wgrp:focus-within .car{transform:rotate(180deg)}
+.wdrop{position:absolute;top:100%;left:0;min-width:300px;padding:16px 18px 18px;margin-top:10px;background:var(--s1);border:1px solid var(--line);border-radius:14px;box-shadow:0 30px 60px -30px rgba(0,0,0,.65);opacity:0;visibility:hidden;transform:translateY(-4px);transition:opacity .16s,transform .16s,visibility .16s}
+.wdrop::before{content:"";position:absolute;left:0;right:0;top:-12px;height:12px}
+.wdrop.end{left:auto;right:0}
+.wgrp:hover .wdrop,.wgrp:focus-within .wdrop{opacity:1;visibility:visible;transform:none}
+.wdh{display:flex;flex-direction:column;gap:3px;margin-bottom:12px}.wdh b{font:400 22px/1.1 var(--serif);color:var(--ivory)}.wdh span{font-size:12.5px;color:var(--muted)}
+.wdc{display:flex;flex-wrap:wrap;gap:7px}
+.wdf{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}.wdf>span{display:block;margin-bottom:8px;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.wdrop{max-width:380px}
+.chip.wf{cursor:pointer;font-size:12.5px;padding:7px 13px;display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid var(--line);color:var(--muted);border-radius:999px;letter-spacing:.02em;text-transform:none}
+.chip.wf:hover{color:var(--ivory);border-color:var(--hover)}
+.chip.wf.on{color:var(--ink);background:var(--champ);border-color:var(--champ)}
+:root[data-theme="light"] .chip.wf.on{color:#fff}
+.chip.wf .lockmark .ic{width:11px;height:11px}
+.wsub{display:flex;align-items:center;gap:7px;padding:10px 28px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.wsl{font:400 11px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--dim2);margin-right:8px}
+
+/* Web app: sign-in, welcome, guest account and apply pages sit in the centre of the page */
+.browser .scr.center{max-width:648px;width:100%;margin:0 auto;min-height:100%;justify-content:center;box-sizing:border-box}
+.browser .scr.center>*:not(.welcome){align-self:stretch}
 </style>
 </head>
 <body>
@@ -1006,9 +1040,10 @@ const SCREENS = {
       ${b.status === 'Confirmed' ? `<div class="qr" style="align-self:center;width:150px;height:150px">QR code</div>` : ''}<div class="rule"></div>
       ${kv([['Name', DB.me.name],['Seats', String(b.seats)],['Code', b.code || 'Issued on confirmation'],['Dress', e.dress]])}</div>
     <div class="btns">${btn('View the experience', go('experience', e.id), 'ghost')}${btn('Cancel booking', act('cancel', e.id), 'ghost')}</div>`; }},
-  bookings: {tab:'bookings', title:'Bookings', back:'more', render: () => { const list = EX().filter(e => bookingOf(e.id)); return `
+  bookings: {tab:'bookings', title:'Bookings', back:'more', render: (id, f) => { const all = EX().filter(e => bookingOf(e.id)), sel = f.filter || 'All', kind = e => { const st = bookingOf(e.id).status; return st === 'Cancelled' || st === 'Declined' ? 'Cancelled' : st === 'Attended' ? 'Past' : 'Upcoming'; }, list = all.filter(e => sel === 'All' || kind(e) === sel); return `
     <div><h2 class="h">Bookings</h2><p class="lede">${esc(sectionOf('bookings').description)}</p></div>
-    ${list.length ? `<div class="stack">${list.map(e => { const b = bookingOf(e.id); return `<button class="ticket" ${go(b.status === 'Cancelled' || b.status === 'Awaiting payment' ? 'experience' : 'ticket', e.id)}><span class="d"><b>${e.day}</b>${e.mon}</span><span class="row" style="border:0;padding:0;min-height:0"><span class="txt"><b>${esc(e.title)}</b><span>${esc(e.place)}. ${b.seats} seat${b.seats > 1 ? 's' : ''}.</span></span>${chip(b.status, statusTone(b.status))}</span></button>`; }).join('')}</div>` : `<p class="note">Nothing booked yet.</p>${btn('Browse experiences', go('experiences'), 'full')}`}`; }},
+    ${all.length ? filters(['All','Upcoming','Past','Cancelled'], f) : ''}
+    ${list.length ? `<div class="stack">${list.map(e => { const b = bookingOf(e.id); return `<button class="ticket" ${go(b.status === 'Cancelled' || b.status === 'Awaiting payment' ? 'experience' : 'ticket', e.id)}><span class="d"><b>${e.day}</b>${e.mon}</span><span class="row" style="border:0;padding:0;min-height:0"><span class="txt"><b>${esc(e.title)}</b><span>${esc(e.place)}. ${b.seats} seat${b.seats > 1 ? 's' : ''}.</span></span>${chip(b.status, statusTone(b.status))}</span></button>`; }).join('')}</div>` : all.length ? '<p class="note">Nothing here.</p>' : `<p class="note">Nothing booked yet.</p>${btn('Browse experiences', go('experiences'), 'full')}`}`; }},
   members: {tab:'members', title:'The Club', render: (id, f) => { const sel = f.filter || 'Everyone', q = (f.q || '').toLowerCase(); const list = [...MEMBERS, ...JOBURG_MEMBERS].filter(m => here(m) && !DB.blocked.includes(m.id) && (sel === 'Everyone' || m.kind === sel) && (!q || (m.name + m.role + m.ind + m.city).toLowerCase().includes(q))); return `
     <div><h2 class="h">The Club</h2><p class="lede">${esc(sectionOf('club').description)}</p></div>
     <form class="searchbar" ${act('search')}>${ic('search')}<input name="q" aria-label="Search members" placeholder="Name, company, industry or city" value="${esc(f.q || '')}"></form>
@@ -1148,13 +1183,14 @@ const SCREENS = {
     <div><div class="chips" style="margin-bottom:10px">${chip(o.type,'gold')}${sent ? chip('Interest sent','ok') : ''}</div><h2 class="h">${esc(o.title)}</h2><p class="lede">From ${esc(o.by)}</p></div>
     <div class="cols"><div><p style="margin:0">${esc(o.sum)}</p>${o.docs ? '<p class="note">Supporting documents exist. The team shares them only after both sides agree to an introduction.</p>' : ''}</div>
       <div class="narrow"><div class="panel">${sent ? '<p class="note">The Quintara team has your interest and will come back to you.</p>' : `<label class="field">Why you would like to be considered<textarea></textarea></label>${btn('Express interest', act('interest', o.id), 'full')}`}</div></div></div>`; }},
-  tv: {tab:'tv', title:'Quintara TV', back:'more', render: () => `
+  tv: {tab:'tv', title:'Quintara TV', back:'more', render: (id, f) => { const sel = f.filter || 'All', on = k => sel === 'All' || sel === k; return `
     <div><h2 class="h">Quintara TV</h2><p class="lede">${esc(sectionOf('tv').description)}</p></div>
-    <div class="feature${fc('tv:feature')}" style="${fs('tv:feature')}"><span class="chips">${chip('Featured series','gold')}</span><span class="t">${esc(TVF().title)}</span><span class="muted">${esc(TVF().sum)}</span><span class="btns" style="margin-top:6px">${btn(EP().some(e => watched(e.id) > 0 && watched(e.id) < 100) ? 'Continue watching' : 'Play episode 1', go('watch', (EP().find(e => watched(e.id) > 0 && watched(e.id) < 100) || EP()[0]).id), 'sm')}</span></div>
+    ${filters(['All','Continue','New','Watched'], f)}
+    ${on('All') ? '' : '<!--'}<div class="feature${fc('tv:feature')}" style="${fs('tv:feature')}"><span class="chips">${chip('Featured series','gold')}</span><span class="t">${esc(TVF().title)}</span><span class="muted">${esc(TVF().sum)}</span><span class="btns" style="margin-top:6px">${btn(EP().some(e => watched(e.id) > 0 && watched(e.id) < 100) ? 'Continue watching' : 'Play episode 1', go('watch', (EP().find(e => watched(e.id) > 0 && watched(e.id) < 100) || EP()[0]).id), 'sm')}</span></div>${on('All') ? '' : '-->'}
     ${sec('Episodes')}
-    <div class="list">${EP().map(e => row(go('watch', e.id), lead('play'), e.title, `Episode ${e.n}, ${e.mins} minutes${watched(e.id) >= 100 ? '. Watched' : watched(e.id) ? '. ' + watched(e.id) + '% watched' : ''}`)).join('')}</div>
-    ${sec('Programmes')}
-    <div class="hscroll">${PG().filter(g => g.status === 'Published').map(g => [g.title, g.meta + (g.members ? '. Members only' : '')]).map(([t,m]) => `<div class="xcard">${media(120, !isMember() && /Members/.test(m) ? `<span class="corner">${chip('Members only','gold')}</span>` : '', 'Still')}<span class="b"><span class="t">${esc(t)}</span><span class="m">${esc(m)}</span></span></div>`).join('')}</div>`},
+    <div class="list">${EP().filter(e => sel === 'All' || (sel === 'Continue' ? watched(e.id) > 0 && watched(e.id) < 100 : sel === 'Watched' ? watched(e.id) >= 100 : !watched(e.id))).map(e => row(go('watch', e.id), lead('play'), e.title, `Episode ${e.n}, ${e.mins} minutes${watched(e.id) >= 100 ? '. Watched' : watched(e.id) ? '. ' + watched(e.id) + '% watched' : ''}`)).join('')}</div>
+    ${on('All') ? '' : '<!--'}${sec('Programmes')}
+    <div class="hscroll">${PG().filter(g => g.status === 'Published').map(g => [g.title, g.meta + (g.members ? '. Members only' : '')]).map(([t,m]) => `<div class="xcard">${media(120, !isMember() && /Members/.test(m) ? `<span class="corner">${chip('Members only','gold')}</span>` : '', 'Still')}<span class="b"><span class="t">${esc(t)}</span><span class="m">${esc(m)}</span></span></div>`).join('')}</div>${on('All') ? '' : '-->'}`; }},
   boutique: {tab:'boutique', title:'Maison Quintara', back:'more', render: (id, f) => { const sel = f.filter || 'All'; return `
     <div class="sec" style="margin:0"><div><h2 class="h">Maison Quintara</h2><p class="lede">${esc(sectionOf('boutique').description)}</p></div>${btn(`Bag (${DB.bag.length})`, go('checkout'), 'ghost sm')}</div>
     ${filters(['All', ...new Set(PRH().map(p => p.cat))], f)}
@@ -1248,12 +1284,27 @@ const SCREENS = {
 };
 
 const PHONE_TABS = [['home','home','Home'],['experiences','cal','Experiences'],['qera','spark','Q\u00c9RA'],['members','users','Club'],['more','grid','More']];
-const WEB_NAV = [
-  ['Discover', [['home','home','Home'],['experiences','cal','Experiences'],['qera','spark','Q\u00c9RA']]],
-  ['The club', [['members','users','Members'],['messages','msg','Messages'],['opportunities','case','Business']]],
-  ['Lifestyle', [['concierge','desk','Concierge'],['lifestyle','leaf','Lifestyle'],['privileges','gem','Privileges'],['bookings','cal','Bookings']]],
-  ['Media and boutique', [['tv','play','Quintara TV'],['boutique','bag','Maison Quintara']]]
+/* Web menu: five main headings at the top right. Each heading's sub-headings are its filters:
+   [screen, filter or null, label]. Details pages count under the heading of their section (by tab). */
+/* Web menu: five headings at the top right. Each has its pages ([screen, null, label]) and, in its panel, shortcuts
+   to the filters on those pages ([screen, filter, label]). The row under the bar lists the current heading's pages;
+   each page shows its own filters as chips. */
+const WEB_MENU = () => [
+  ['Discover', 'Experiences, QÉRA and everything new', [['home',null,'Home'],['experiences',null,'Experiences'],['qera',null,'QÉRA'],['search',null,'Search']], ['home','experiences','qera','search'],
+    [['Experiences by type', [...new Set(visibleExps().map(e => e.cat))].sort().map(c => ['experiences', c, c])]]],
+  ['The Club', 'Members, introductions and Business', [['members',null,'Members'],['matching',null,'People to meet'],['messages',null,'Messages'],['opportunities',null,'Business'],['notifications',null,'Notifications'],['profile',null,'Your profile']], ['members','messages','opportunities','profile','notifications','more'],
+    [['Members by type', ['Founders','Investors','Creatives','Executives'].map(k => ['members', k, k])]]],
+  ['Lifestyle', 'Partners, services and your Curator', [['lifestyle',null,'Partners and services'],['curator',null,'Lifestyle Curator'],['privileges',null,'Privileges'],['concierge',null,'Concierge'],['bookings',null,'Bookings']], ['lifestyle','privileges','concierge','bookings'],
+    [['Show', [['lifestyle','Partners','Partners'],['lifestyle','Services','Services']]]]],
+  ['Media', 'Quintara TV: films from inside the club', [['tv',null,'Quintara TV']], ['tv'],
+    [['Episodes', [['tv','Continue','Continue watching'],['tv','New','New to you'],['tv','Watched','Watched']]]]],
+  ['Fashion', 'Maison Quintara, the house’s own boutique', [['boutique',null,'Maison Quintara'],['checkout',null,'Your bag']], ['boutique'],
+    [['Pieces by type', [...new Set(PRH().map(p => p.cat))].sort().map(c => ['boutique', c, c])]]]
 ];
+const menuGroupOf = (screen, tab) => WEB_MENU().find(g => g[2].some(([t]) => t === screen)) || WEB_MENU().find(g => g[3].includes(tab));
+const menuOn = (f, [t, flt]) => f.screen === t && (flt === null || f.filter === flt);
+const menuItem = (f, it, cls) => { const [t, flt, l] = it, lockd = !isMember() && MEMBER_ONLY[t] && !(t === 'qera' && isGuestAcct());
+  return `<button class="${cls}${menuOn(f, it) ? ' on' : ''}" data-go="${t}" ${flt ? `data-flt="${esc(flt)}"` : ''} ${menuOn(f, it) ? 'aria-current="page"' : ''}>${esc(l)}${lockd ? `<span class="lockmark">${ic('lock')}</span>` : ''}</button>`; };
 
 /* ---------- QÉRA as Chief of Staff ---------- */
 function briefData() {
@@ -1975,6 +2026,52 @@ ADMIN.checkin = {tab:'checkin', render: (id, f) => `
     ${f.door ? `<p class="note" role="status" style="font-size:18px;${f.door.ok ? '' : 'border-color:var(--err);color:var(--err)'}">${esc(f.door.text)}</p>` : `<p class="muted" style="font-size:13px">Sample ticket: QT-7F3K9A (Costa Convivio).</p>`}`};
 
 ADMIN_NAV.push(['insights','spark','Insights']);
+/* QÉRA Control Centre (admin): how the members' Chief of Staff is doing and how it runs. */
+ADMIN_NAV.splice(1, 0, ['qeracc','spark','QÉRA Control Centre']);
+const QCC = () => DB.qcc || (DB.qcc = {tab:'overview', llm:false, level:3, cap:50, order:['anthropic','openai','gemini'], open:null, ask:null, kbEdit:null,
+  kb:[{t:'Experience cancellation and refunds', topic:'Cancellations', aud:'Members only', st:'Published', v:2, body:'Members may cancel up to 72 hours before an experience for a full refund. Within 72 hours the seat may be transferred to another member.'},
+      {t:'Bringing a guest', topic:'Policies', aud:'Guests and members', st:'Published', v:1, body:'Guests are welcome at open experiences when the member books a second seat.'},
+      {t:'Membership renewals', topic:'Membership', aud:'Members only', st:'Published', v:1, due:true, body:'Memberships renew each year, with reminders 30 and 7 days before and 14 days of grace.'},
+      {t:'Dress codes', topic:'FAQ', aud:'Guests and members', st:'Draft', v:1, body:'Signature evenings are black tie unless stated otherwise.'}]});
+const QPROV = {anthropic:['Anthropic Claude','claude-sonnet-5-5'], openai:['OpenAI','gpt-6.1-sol'], gemini:['Google Gemini','gemini-3.1-pro-preview']};
+const QLEVELS = [[1,'Informational','QÉRA answers, explains and recommends. The only thing it proposes is handing a request to the Lifestyle Curator.'],[2,'Assisted planning','QÉRA also prepares plans and documents. Members book themselves, or through the Lifestyle Curator.'],[3,'Approval-based execution','QÉRA proposes bookings and requests, and carries them out only after the member confirms each one.'],[4,'Limited delegated automation','Standing instructions within spending limits. Not yet offered: it needs the payment provider and a legal review.']];
+const qtile = (k, v, d) => `<div class="ins-tile"><span class="k">${esc(k)}</span><span class="v">${esc(String(v))}</span>${d ? `<span class="d">${esc(d)}</span>` : ''}</div>`;
+const qrow = cells => `<div style="display:grid;grid-template-columns:${cells.map(c => c[1] || '1fr').join(' ')};gap:12px;padding:12px 0;border-bottom:1px solid var(--line);align-items:center;font-size:13.5px">${cells.map(c => `<div>${c[0]}</div>`).join('')}</div>`;
+ADMIN.qeracc = {tab:'qeracc', render: (id, f) => { const q = QCC(), mine = (DB.qera || []).length;
+  const tabs = [['overview','Overview'],['curator','Referred to the Curator'],['knowledge','Knowledge'],['config','Configuration'],['calls','Model calls'],['conv','Conversations']];
+  let body = '';
+  if (q.tab === 'overview') body = `
+    ${sec('Members and requests')}<div class="ins-tiles">${qtile('Members', 41, 'and 9 guests')}${qtile('Requests', 386 + mine, `${372 + mine} replies`)}${qtile('Actions proposed', 112, '84 confirmed, 19 declined')}${qtile('Completion', '82%', 'Confirmed, of those decided')}${qtile('Failed actions', 2, 'Confirmed but could not be done')}${qtile('Satisfaction', '94%', '118 helpful, 7 not')}</div>
+    ${sec('Bookings and handovers')}<div class="ins-tiles">${qtile('Experience bookings', 37, 'Made by QÉRA after confirmation')}${qtile('Revenue', 'R 96 600', 'Confirmed experience bookings')}${qtile('Partner bookings', 29, 'Sent to partners')}${qtile('Service requests', 11)}${qtile('Whole plans booked', 6)}${qtile('Referred to the Curator', 14, '3 still open')}</div>
+    ${sec('Intelligence and cost')}<div class="ins-tiles">${qtile('Hosted model answers', q.llm ? '91%' : '0%', q.llm ? '34 by built-in rules' : 'All by QÉRA’s built-in rules')}${qtile('Model calls', q.llm ? 1204 : 0, q.llm ? '6 failed (0.5%)' : 'Hosted models are off')}${qtile('Response time', q.llm ? '2.3 s' : 'Not yet', 'Average per model call')}${qtile('Model cost', q.llm ? 'US$18.40' : 'US$0.00', 'Estimated, this period')}${qtile('Today', q.llm ? 'US$0.92' : 'US$0.00', `Daily cap US$${q.cap}`)}${qtile('Knowledge', q.kb.filter(k => k.st === 'Published').length, `${q.kb.filter(k => k.st === 'Draft').length} drafts, ${q.kb.filter(k => k.due).length} due for review`)}</div>
+    ${sec('What QÉRA was asked to do')}${bars([['List experiences', 96], ['Recommend', 71], ['Weekly brief', 58], ['Search knowledge', 44], ['Book experience', 41], ['Book partner', 33], ['Create itinerary', 19], ['Create concierge request', 14]])}`;
+  if (q.tab === 'curator') body = `<div class="panel" style="gap:0">${qrow([['<b>Request</b>','2fr'],['<b>Member</b>'],['<b>Status</b>'],['<b>Received</b>']])}${[['Private jet to Zanzibar, Saturday, for two','Thandi Mokoena','Requested','Today, 18:48'],['Helicopter transfer to Franschhoek','Daniel Fourie','Options provided','Mon, 18:10'],['Anniversary dinner on a private boat','Aisha Parker','Completed','Fri, 12:31']].map(r => qrow([[`${esc(r[0])}<small class="muted" style="display:block">Hospitality</small>`,'2fr'],[esc(r[1])],[`<span class="chip">${r[2]}</span>`],[esc(r[3])]])).join('')}</div>`;
+  if (q.tab === 'knowledge') body = `
+    <p class="note">QÉRA answers questions about policies and services from the published entries here. Entries for “Guests and members” can be told to guests; “Members only” are not. Staff-only entries are never read by QÉRA. Instructions written into an entry are treated as information, never followed.</p>
+    <div>${btn('Add an entry', act('qkbnew'), 'sm')}</div>
+    ${q.kbEdit ? `<form class="panel" ${act('qkbsave')}><h3 class="h" style="font-size:20px">New entry</h3><label class="field">Title<input name="t" required></label><label class="field">Text QÉRA may use<textarea name="body" rows="4" required></textarea></label><label class="field">Who may be told<select name="aud"><option>Members only</option><option>Guests and members</option><option>Staff only (QÉRA never sees it)</option></select></label><label class="field">Status<select name="st"><option>Draft</option><option>Published</option></select></label><div style="display:flex;gap:10px">${btn('Save')}${btn('Cancel', act('qkbnew'), 'ghost')}</div></form>` : ''}
+    <div class="panel" style="gap:0">${qrow([['<b>Entry</b>','2.4fr'],['<b>Topic</b>'],['<b>Who may be told</b>','1.3fr'],['<b>Status</b>']])}${q.kb.map(k => qrow([[`${esc(k.t)}<small class="muted" style="display:block">${esc(k.body)}</small>`,'2.4fr'],[esc(k.topic)],[esc(k.aud),'1.3fr'],[`<span class="chip">${k.st}</span>${k.due ? ' <span class="chip">Review</span>' : ''}<small class="muted" style="display:block">Version ${k.v}</small>`]])).join('')}</div>`;
+  if (q.tab === 'config') body = `
+    <div class="panel"><h3 class="h" style="font-size:22px">How QÉRA runs</h3>
+      <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" ${q.llm ? 'checked' : ''} ${act('qllm')}> Use hosted AI models</label>
+      <p class="note">${q.llm ? 'Members’ messages are sent to the providers below to be understood, with the Quintara records QÉRA looks up. Card details and passwords are never sent. Check each provider’s data terms and data location first (POPIA, cross-border transfer).' : 'Off: QÉRA answers from its built-in rules alone and no member text leaves Quintara’s servers. It still books, plans and refers as usual.'}</p>
+      <p class="muted" style="font-size:13px;margin:0">Providers, tried in this order. If one fails or is slow, the next answers; if all fail, the built-in rules do.</p>
+      ${q.order.map((p, i) => `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span style="min-width:150px">${i + 1}. ${QPROV[p][0]}</span><span class="chip">${i === 0 ? 'Key set' : 'No key'}</span><input value="${QPROV[p][1]}" aria-label="Model" style="min-width:220px;background:var(--s1);border:1px solid var(--line);border-radius:6px;padding:9px 12px;color:var(--ivory);font:inherit;font-size:13.5px">${i ? `<button class="textlink" ${act('qup', p)}>Up</button>` : ''}</div>`).join('')}
+      <p class="muted" style="font-size:13px;margin:6px 0 0">What QÉRA may do</p>
+      ${QLEVELS.map(([n, l, d]) => `<label style="display:flex;gap:10px;align-items:flex-start;${n === 4 ? 'opacity:.5' : ''}"><input type="radio" name="lvl" ${q.level === n ? 'checked' : ''} ${n === 4 ? 'disabled' : act('qlevel', n)}><span><b style="font-weight:500">Level ${n}: ${l}.</b> <span class="muted">${d}</span></span></label>`).join('')}
+      <div style="display:flex;gap:12px;flex-wrap:wrap"><label class="field">Daily model budget (US$)<input value="${q.cap}"></label><label class="field">Model calls per member per hour<input value="60"></label><label class="field">Refer to the Curator above (R)<input value="50 000"></label></div>
+      <div>${btn('Save', act('qsave'))}</div></div>
+    <div class="panel"><h3 class="h" style="font-size:22px">QÉRA’s voice</h3><p class="muted" style="margin:0">The words that tell a hosted model who QÉRA is and how it speaks. Quintara’s safety rules are always added after them and cannot be changed here. Version 2 is live.</p>
+      ${[['2','Warmer greeting, shorter answers','Live'],['1','Built-in version','']].map(r => qrow([[`Version ${r[0]} ${r[2] ? '<span class="chip">Live</span>' : ''}`],[esc(r[1]),'2fr'],[r[2] ? '' : `<button class="textlink" ${act('qrollback')}>Make live</button>`]])).join('')}</div>`;
+  if (q.tab === 'calls') body = `<p class="note">Each call QÉRA made to a hosted model: time, size, estimated cost and any error. What members wrote is not kept here.</p>
+    <div class="panel" style="gap:0">${qrow([['<b>When</b>'],['<b>Model</b>'],['<b>Result</b>','1.6fr'],['<b>Time</b>'],['<b>Cost</b>']])}${q.llm ? [['18:48','claude-sonnet-5-5','Asked for search knowledge','1.9 s','US$0.004'],['18:47','claude-sonnet-5-5','Answered','2.4 s','US$0.006'],['18:31','claude-sonnet-5-5','Failed: claimed something was done; the built-in rules answered instead','2.1 s','US$0.005'],['18:30','gpt-6.1-sol','Answered (Anthropic timed out)','3.0 s','US$0.006']].map(r => qrow([[r[0]],[r[1]],[esc(r[2]),'1.6fr'],[r[3]],[r[4]]])).join('') : `<p class="muted" style="padding:14px 0;margin:0">No hosted model has been called yet. Turn hosted models on under Configuration.</p>`}</div>`;
+  if (q.tab === 'conv') body = `<p class="note">Conversations are private to each member. Open one only to investigate a problem: you will be asked why, and that is written to the audit log with your name. Card numbers, email addresses and phone numbers are hidden.</p>
+    ${q.ask ? `<form class="panel" ${act('qread')}><label class="field">Why do you need to read ${esc(q.ask)}’s conversation?<input name="reason" placeholder="The member reported a wrong answer about refunds"></label>${f.err && f.err.reason ? `<span class="err" role="alert">${f.err.reason}</span>` : ''}<div>${btn('Open')}</div></form>` : ''}
+    ${q.open ? `<div class="panel"><h3 class="h" style="font-size:20px">${esc(q.open)}</h3>${thread([['me','What is the cancellation policy?'],['them','Experience cancellation and refunds: members may cancel up to 72 hours before an experience for a full refund.','QÉRA, built-in rules, rated helpful'],['me','My email is [email hidden], please book Saffron House for Friday'],['them','I can ask Saffron House for a booking on Friday 20 November at 19:30 for 2. Shall I go ahead?','QÉRA, anthropic:claude-sonnet-5-5']])}</div>` : ''}
+    <div class="panel" style="gap:0">${qrow([['<b>Who</b>','1.4fr'],['<b>Messages</b>'],['<b>Proposed</b>'],['<b>Not helpful</b>'],['']])}${[['Thandi Mokoena', 48, 9, 1],['Daniel Fourie', 31, 6, 0],['Lerato M. (guest)', 12, 0, 0]].map(r => qrow([[esc(r[0]),'1.4fr'],[r[1]],[r[2]],[r[3]],[`<button class="textlink" ${act('qask', r[0])}>Open</button>`]])).join('')}</div>`;
+  return `<div><h2 class="h">QÉRA Control Centre</h2><p class="lede">QÉRA is each member’s Chief of Staff. See what it is doing for members, what it hands to people, what it costs and how it is set up. It never acts for a member without their confirmation.</p></div>
+    <div class="seg" role="tablist" aria-label="Sections" style="flex-wrap:wrap">${tabs.map(([k, l]) => `<button role="tab" aria-pressed="${q.tab === k}" ${act('qtab', k)}>${l}</button>`).join('')}</div>${body}`; }};
+
 ADMIN_NAV.push(['staff','users','Staff accounts'], ['audit','card','Audit log']);
 const bars = rows => { const top = Math.max(1, ...rows.map(r => r[1])); return `<div class="panel" style="gap:12px">${rows.map(([l,v,t]) => `<div><div style="display:flex;justify-content:space-between;gap:12px;font-size:13px"><span>${esc(l)}</span><span class="muted">${esc(t === undefined ? String(v) : t)}</span></div><div style="height:6px;border-radius:3px;background:#1F2225;margin-top:6px"><div style="height:6px;border-radius:3px;background:#C9AB72;width:${Math.round(v / top * 100)}%"></div></div></div>`).join('')}</div>`; };
 /* Insights: a year of figures for the mock-up, made the same way each time, plus what is done in the mock-up itself. */
@@ -2230,11 +2327,13 @@ function mount(el, kind) {
           ? `<button class="qera" ${go(t)} ${t === tab ? 'aria-current="page"' : ''}><span class="orb">${ic(i)}</span>${l}</button>`
           : `<button ${go(t)} ${t === tab ? 'aria-current="page"' : ''}>${ic(i)}${l}</button>`).join('')}</nav>`;
     } else {
-      el.innerHTML = `<div class="chrome"><i></i><i></i><i></i><span>Quintara web app</span></div>` + (bare ? `<div class="shell"><div class="main">${body}</div></div>` : `<div class="shell">
-        <aside class="side"><button class="logo" aria-label="Quintara home" ${go('home')}><img class="m" src="${MONO}" alt=""><img class="w" src="${WORD}" alt="Quintara"></button>
-          ${WEB_NAV.map(([group, items]) => `<h4>${group}</h4><nav aria-label="${group}">${items.map(([t,i,l]) => `<button ${go(t)} ${t === s.tab ? 'aria-current="page"' : ''}>${ic(i)}${l}${t === 'messages' && unreadMsg ? `<span class="count">${unreadMsg}</span>` : ''}${!isMember() && MEMBER_ONLY[t] && !(t === 'qera' && isGuestAcct()) ? `<span class="lockmark">${ic('lock')}</span>` : ''}</button>`).join('')}</nav>`).join('')}
-          ${isMember() ? `<button class="me" ${go('profile')}>${avatar(DB.me.name)}<span>${esc(DB.me.name)}<small>${esc(DB.me.tier)}</small></span></button>` : isGuestAcct() ? `<button class="me" ${go('account')}>${avatar(DB.gacct.name)}<span>${esc(DB.gacct.name)}<small>Guest account</small></span></button>` : `<button class="me" ${go('apply')}><span class="lead">${ic('gem')}</span><span>${DB.application ? 'Your application' : 'Apply for membership'}<small>${DB.application ? APP_STEPS[DB.application.step] : 'Read by a person'}</small></span></button>`}</aside>
-        <div class="main"><div class="wtop"><form class="search" ${act('globalsearch')}>${ic('search')}<input name="q" aria-label="Search Quintara" placeholder="Search Quintara"></form><span class="sp"></span>${cityPin()}${actions}</div>${body}</div></div>`);
+      const grp = menuGroupOf(f.screen, s.tab), me = isMember() ? `<button class="iconbtn meb" aria-label="Your profile" ${go('profile')}>${avatar(DB.me.name)}</button>` : isGuestAcct() ? '' : `<button class="btn ghost sm" ${go('apply')}>${DB.application ? 'Your application' : 'Apply'}</button>`;
+      el.innerHTML = `<div class="chrome"><i></i><i></i><i></i><span>Quintara web app</span></div>` + (bare ? `<div class="shell"><div class="main">${body}</div></div>` : `<div class="shell"><div class="main">
+        <header class="wbar"><button class="wlogo" aria-label="Quintara home" ${go('home')}><img class="m" src="${MONO}" alt=""><img class="w" src="${WORD}" alt="Quintara"></button><span class="sp"></span>
+          <button class="iconbtn" aria-label="Search" ${go('search')}>${ic('search')}</button>${actions}${me}${cityPin()}
+          <nav class="wmenu" aria-label="Main">${WEB_MENU().map(([h, sub, items, , sets], gi) => `<div class="wgrp${grp && grp[0] === h ? ' cur' : ''}"><button class="wh" data-go="${items[0][0]}" ${items[0][1] ? `data-flt="${esc(items[0][1])}"` : ''} aria-haspopup="true" ${grp && grp[0] === h ? 'aria-current="true"' : ''}>${h}<svg class="car" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+            <div class="wdrop${gi >= 3 ? ' end' : ''}" role="menu" aria-label="${h}"><div class="wdh"><b>${h}</b><span>${esc(sub)}</span></div><div class="wdc">${items.map(it => menuItem(f, it, 'chip wf')).join('')}</div>${(sets || []).filter(([, xs]) => xs.length).map(([t, xs]) => `<div class="wdf"><span>${esc(t)}</span><div class="wdc">${xs.map(it => menuItem(f, it, 'chip wf')).join('')}</div></div>`).join('')}</div></div>`).join('')}</nav></header>
+        ${grp ? `<div class="wsub" aria-label="${grp[0]} filters"><span class="wsl">${grp[0]}</span>${grp[2].map(it => menuItem(f, it, 'chip wf')).join('')}</div>` : ''}${body}</div></div>`);
     }
     const nsc = el.querySelector('.scroll'); if (nsc) nsc.scrollTop = keep === 'end' ? nsc.scrollHeight : y;
     if (kind === 'phone' && LK().on && LK().locked && (isMember() || isGuestAcct())) el.insertAdjacentHTML('beforeend', `<div class="lockov" role="dialog" aria-modal="true" aria-label="Quintara is locked"><img class="m" src="${MONO}" alt=""><h2>Quintara is locked</h2><p class="muted" style="margin:0">Use Face ID to open the app.</p><div class="btns">${btn('Unlock with Face ID', act('unlock'), 'full')}${btn('Sign out', act('signout'), 'ghost full')}</div></div>`);
@@ -2247,7 +2346,7 @@ function mount(el, kind) {
     toast(kind === 'admin' ? 'Working in ' + cityName(sel.value) : 'Showing ' + cityName(sel.value));
   });
   el.addEventListener('click', ev => {
-    const g = ev.target.closest('[data-go]'); if (g && el.contains(g)) { const [s, id] = g.dataset.go.split(':'); f.go(s, id); return; }
+    const g = ev.target.closest('[data-go]'); if (g && el.contains(g)) { const [s, id] = g.dataset.go.split(':'); f.go(s, id); if (g.dataset.flt && f.screen === s) { f.filter = g.dataset.flt; f.render(); } if (g.closest('.wdrop')) g.blur(); return; }
     const a = ev.target.closest('[data-act]'); if (a && el.contains(a) && a.tagName !== 'FORM') { ev.preventDefault(); run(f, a.dataset.act, null); }
   });
   el.addEventListener('change', ev => { const t = ev.target;
@@ -2306,6 +2405,16 @@ function run(f, action, form) {
       frames.forEach(x => { if (x.kind !== 'admin') { x.screen = 'qera'; x.id = null; } }); keep = false; toast('Guest account created'); break; }
     case 'gdelete': { if (val('confirm') !== 'DELETE') { f.err = {confirm:'Type DELETE to confirm'}; all = false; break; } DB.gacct = null; DB.gq = []; DB.gUse = null; DB.mode = 'new'; frames.forEach(x => { if (x.kind !== 'admin') x.screen = 'start'; }); keep = false; toast('Guest account deleted'); break; }
     case 'guse': { const u = GU(); u.secs = GLIMIT; u.last = Date.now(); keep = 'end'; break; }
+    case 'qtab': QCC().tab = arg; QCC().open = null; QCC().ask = null; break;
+    case 'qllm': QCC().llm = !QCC().llm; toast(QCC().llm ? 'Hosted AI models on. Recorded in the audit log' : 'Hosted AI models off: QÉRA uses its built-in rules'); break;
+    case 'qlevel': QCC().level = Number(arg); toast('QÉRA set to level ' + arg + ': ' + QLEVELS[Number(arg) - 1][1].toLowerCase()); break;
+    case 'qup': { const o = QCC().order, i = o.indexOf(arg); o.splice(i, 1); o.splice(i - 1, 0, arg); break; }
+    case 'qsave': toast('Saved. QÉRA uses it within a few seconds'); break;
+    case 'qrollback': toast('Version 1 is live again'); break;
+    case 'qkbnew': QCC().kbEdit = !QCC().kbEdit; break;
+    case 'qkbsave': { const t = val('t'), b = val('body'); if (t.length < 3 || b.length < 10) { toast('Add a title and the text QÉRA may use'); all = false; break; } QCC().kb.unshift({t, topic:'FAQ', aud:val('aud'), st:val('st'), v:1, body:b}); QCC().kbEdit = false; toast(val('st') === 'Published' ? 'Published. QÉRA can use it now' : 'Saved as a draft'); break; }
+    case 'qask': QCC().ask = arg; QCC().open = null; break;
+    case 'qread': if (val('reason').length < 10) { f.err = {reason:'Say why you need to read it (at least 10 characters)'}; all = false; break; } QCC().open = QCC().ask; QCC().ask = null; toast('Opened. Your reason is in the audit log'); break;
     case 'insper': DB.insPeriod = arg; break;
     case 'insexport': toast('Insights exported as CSV, for ' + ({'7d':'the last 7 days','30d':'the last 30 days','90d':'the last 90 days','12m':'the last 12 months','ytd':'this year'})[DB.insPeriod || '30d']); break;
     case 'insreport': toast('This week’s report is on its way to your email'); break;
@@ -2766,6 +2875,7 @@ function show(which) {
   frames.forEach(x => x.render(true));
 }
 VIEWS.forEach(v => document.getElementById('show-' + v).addEventListener('click', () => show(v)));
+show('web');
 
 /* The WhatsApp chat opens at its latest message, as WhatsApp does. */
 new MutationObserver(() => document.querySelectorAll('.wa-body').forEach(b => { if (!b.dataset.at || +b.dataset.at !== b.children.length) { b.scrollTop = b.scrollHeight; b.dataset.at = b.children.length; } })).observe(document.body, {childList:true, subtree:true});

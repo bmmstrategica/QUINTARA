@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { FilterChips, useQueryFilter } from '@/components/filter-chips';
 import Link from 'next/link';
 import { useAction, usePermission, useResource } from '@quintara/app-core';
 import { deliveryFee, formatMoney, ORDER_STAGE_LABEL, ORDER_STAGES, ORDER_STATUS_LABEL, orderInputSchema, orderStageIndex } from '@quintara/domain';
@@ -14,14 +15,20 @@ const when = (iso: string) => new Intl.DateTimeFormat('en-ZA', { day: 'numeric',
 const money = (minor: number, currency: string) => (minor === 0 ? 'No charge' : formatMoney(minor, currency));
 
 export default function BoutiquePage() {
+  return <Suspense><Boutique /></Suspense>;
+}
+
+function Boutique() {
   const shop = useSection('boutique');
   const products = useResource((api) => api.listProducts());
   const canShop = usePermission('boutique.shop');
   const isMember = usePermission('directory.view');
   const orders = useResource((api) => (canShop ? api.listOrders() : Promise.resolve([])), [canShop]);
   const [bag, setBag] = useState<BagLine[]>([]);
-  const [category, setCategory] = useState('');
-  const [wishOnly, setWishOnly] = useState(false);
+  // Kept in the address (?category=…, ?saved=1 for a member's wishlist), so the menu's shortcuts land here.
+  const [category, setCategory] = useQueryFilter('category');
+  const [saved, setSaved] = useQueryFilter('saved', isMember ? ['1'] : []);
+  const wishOnly = saved === '1';
   const reload = () => { products.reload(); orders.reload(); };
 
   const add = (product: Product, option: string) => setBag((lines) => {
@@ -33,20 +40,15 @@ export default function BoutiquePage() {
     <>
       <div className="head">
         <div><h2>Maison Quintara</h2><p className="lede">{shop.description}</p><p style={{ margin: '0.6rem 0 0' }}><a href={process.env.NEXT_PUBLIC_MAISON_URL ?? 'http://localhost:3002'} target="_blank" rel="noopener noreferrer">Visit the Maison Quintara shop</a></p></div>
-        <ResourceView resource={products}>
-          {(list) => (
-            <div className="row">
-              {isMember ? <label className="check"><input type="checkbox" checked={wishOnly} onChange={(event) => setWishOnly(event.target.checked)} /> Wishlist only</label> : null}
-              <label>Show
-                <select value={category} onChange={(event) => setCategory(event.target.value)}>
-                  <option value="">Everything</option>
-                  {[...new Set(list.map((p) => p.category))].sort().map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </label>
-            </div>
-          )}
-        </ResourceView>
       </div>
+      <ResourceView resource={products}>
+        {(list) => list.length ? (
+          <div className="chips-row">
+            <FilterChips label="Category" value={category} onChange={setCategory} options={[['', 'All pieces', list.length], ...[...new Set(list.map((p) => p.category))].sort().map((c) => [c, c, list.filter((p) => p.category === c).length] as const)]} />
+            {isMember ? <FilterChips label="Wishlist" value={saved} onChange={() => setSaved(wishOnly ? '' : '1')} options={[['1', 'Wishlist only', list.filter((p) => p.wished).length]]} /> : null}
+          </div>
+        ) : null}
+      </ResourceView>
       <div className="detail" style={{ marginTop: 0 }}>
         <div>
           <ResourceView resource={products} isEmpty={(list) => list.length === 0} empty={<p className="muted">The shelves are being filled.</p>}>
@@ -61,7 +63,7 @@ export default function BoutiquePage() {
           {isMember ? null : <p className="muted" style={{ fontSize: '0.9rem', marginTop: '1.5rem' }}>Members pay member prices and see pieces kept for members. <Link href="/apply">Apply for membership</Link> or <Link href="/sign-in">sign in</Link>.</p>}
         </aside>
       </div>
-      {canShop ? <section className="panel" style={{ marginTop: '2.5rem' }}>
+      {canShop ? <section id="orders" className="panel" style={{ marginTop: '2.5rem', scrollMarginTop: '9rem' }}>
         <h3>Your orders</h3>
         <ResourceView resource={orders} isEmpty={(list) => list.length === 0} empty={<p className="muted" style={{ paddingTop: '0.8rem' }}>Orders appear here once you place one.</p>}>
           {(list) => list.map((order) => <OrderItem key={order.id} order={order} onChanged={reload} />)}

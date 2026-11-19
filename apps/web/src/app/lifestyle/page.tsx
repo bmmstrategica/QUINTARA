@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { usePermission, useResource, useSession } from '@quintara/app-core';
 import { LifestyleCurator, LifestyleDirectory } from '@/components/lifestyle-services';
 import { Loading, ResourceView } from '@/components/states';
@@ -19,7 +20,7 @@ export default function LifestylePage() {
         {isMember ? null : <Link className="btn quiet" href="/apply">Apply for membership</Link>}
       </div>
       <LifestyleCurator />
-      <LifestyleDirectory isMember={isMember} />
+      <Suspense fallback={<Loading />}><LifestyleDirectory isMember={isMember} /></Suspense>
       {isMember ? <YourCodes /> : null}
     </>
   );
@@ -28,7 +29,7 @@ export default function LifestylePage() {
 function YourCodes() {
   const redemptions = useResource((api) => api.listMyRedemptions());
   return (
-    <section className="panel" style={{ marginTop: '2.5rem' }}>
+    <section id="codes" className="panel" style={{ marginTop: '2.5rem', scrollMarginTop: '9rem' }}>
       <h3>Your codes</h3>
       <ResourceView resource={redemptions} isEmpty={(list) => list.length === 0} empty={<p className="muted" style={{ paddingTop: '0.8rem' }}>Codes you redeem appear here.</p>}>
         {(list) => list.map((r) => (

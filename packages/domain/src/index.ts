@@ -100,13 +100,17 @@ export const STAFF_PERMISSIONS = [
   'admin.staff.manage',
   // The full audit log of every member of staff. Everyone sees their own activity.
   'admin.audit.view',
+  // The QÉRA Control Centre: its dashboard, escalations and knowledge base.
+  'admin.qera.view',
+  // Changing how QÉRA runs (models, prompts, autonomy, limits), editing its knowledge, and reading conversations.
+  'admin.qera.manage',
 ] as const;
 export type StaffPermission = (typeof STAFF_PERMISSIONS)[number];
 
 const STAFF_ROLE_PERMISSIONS: Record<StaffRole, StaffPermission[]> = {
   admin: [...STAFF_PERMISSIONS],
   // The desk runs experiences and guest lists; it does not decide who becomes a member.
-  concierge: ['admin.experiences.manage', 'admin.bookings.manage', 'admin.concierge.manage', 'admin.content.manage'],
+  concierge: ['admin.experiences.manage', 'admin.bookings.manage', 'admin.concierge.manage', 'admin.content.manage', 'admin.qera.view'],
 };
 
 export function staffCan(roles: readonly StaffRole[], permission: StaffPermission): boolean {
@@ -1436,4 +1440,5 @@ export function sectionText(list: readonly SectionCopy[] | undefined, key: Secti
 }
 
 export * from './qera.ts';
+export * from './qera-control.ts';
 export * from './whatsapp.ts';

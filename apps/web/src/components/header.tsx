@@ -4,32 +4,43 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { usePermission, useSession } from '@quintara/app-core';
 import { CityPicker } from './city-picker';
+import { Menu } from './menu';
 import { ThemeToggle } from './theme-toggle';
 
+const icon = {
+  search: <><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.4-4.4" /></>,
+  messages: <path d="M4 5.5h16v10.5H9l-5 4z" />,
+  bell: <><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></>,
+  user: <><circle cx="12" cy="8.5" r="3.8" /><path d="M4.5 20.5c1.2-3.8 4-5.5 7.5-5.5s6.3 1.7 7.5 5.5" /></>,
+};
+
+function IconLink({ href, label, name, current }: { href: string; label: string; name: keyof typeof icon; current: boolean }) {
+  return (
+    <Link className="icon-link" href={href} aria-label={label} title={label} aria-current={current ? 'page' : undefined}>
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">{icon[name]}</svg>
+    </Link>
+  );
+}
+
+/** Logo on the left; on the right, search and account shortcuts, the location icon, then the five main headings. */
 export function Header() {
   const pathname = usePathname();
   const { session, guest, status } = useSession();
   const isMember = usePermission('directory.view');
-
-  const links: [href: string, label: string][] = isMember
-    ? [['/', 'Home'], ['/qera', 'QÉRA'], ['/search', 'Search'], ['/experiences', 'Experiences'], ['/members', 'Members'], ['/business', 'Business'], ['/lifestyle', 'Lifestyle'], ['/boutique', 'Maison Quintara'], ['/tv', 'TV'], ['/concierge', 'Concierge'], ['/messages', 'Messages'], ['/bookings', 'Bookings'], ['/notifications', 'Notifications'], ['/profile', 'Profile']]
-    : guest
-      ? [['/', 'Quintara'], ['/qera', 'QÉRA'], ['/experiences', 'Experiences'], ['/lifestyle', 'Lifestyle'], ['/boutique', 'Maison Quintara'], ['/tv', 'TV'], ['/search', 'Search'], ['/apply', 'Apply'], ['/account', 'Account']]
-      : [['/', 'Quintara'], ['/experiences', 'Experiences'], ['/lifestyle', 'Lifestyle'], ['/boutique', 'Maison Quintara'], ['/tv', 'TV'], ['/search', 'Search'], ['/apply', 'Apply']];
-
-  const isCurrent = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
+  const at = (href: string) => pathname.startsWith(href);
 
   return (
     <header className="bar">
       <Link className="brand" href="/" aria-label="Quintara home"><img src="/quintara-emblem.png" alt="" /><img src="/quintara-wordmark.png" alt="Quintara" /></Link>
-      <nav className="nav" aria-label="Main">
-        {links.map(([href, label]) => (
-          <Link key={href} href={href} aria-current={isCurrent(href) ? 'page' : undefined}>{label}</Link>
-        ))}
-      </nav>
-      <CityPicker />
-      <ThemeToggle />
-      {status === 'ready' && !session && !guest ? <><Link className="btn quiet small" href="/join">Create account</Link><Link className="btn quiet small" href="/sign-in">Sign in</Link></> : null}
+      <div className="bar-tools">
+        <IconLink href="/search" label="Search" name="search" current={at('/search')} />
+        {isMember ? <><IconLink href="/messages" label="Messages" name="messages" current={at('/messages')} /><IconLink href="/notifications" label="Notifications" name="bell" current={at('/notifications')} /><IconLink href="/profile" label="Your profile" name="user" current={at('/profile')} /></> : null}
+        {!isMember && guest ? <IconLink href="/account" label="Your account" name="user" current={at('/account')} /> : null}
+        {status === 'ready' && !session && !guest ? <><Link className="btn quiet small" href="/sign-in">Sign in</Link><Link className="btn quiet small" href="/apply">Apply</Link></> : null}
+        <ThemeToggle />
+        <CityPicker />
+      </div>
+      <Menu />
     </header>
   );
 }

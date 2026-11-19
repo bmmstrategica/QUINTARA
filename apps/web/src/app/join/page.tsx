@@ -57,8 +57,9 @@ export default function JoinPage() {
   );
 
   return (
-    <div className="split">
+    <div className="split centred">
       <div>
+        <img className="auth-mark" src="/quintara-emblem.png" alt="" />
         <h2>Create a guest account</h2>
         <p className="lede" style={{ marginTop: '1rem' }}>{intro.description}</p>
         <p className="muted">Membership is separate and by application. You can apply at any time from your account.</p>

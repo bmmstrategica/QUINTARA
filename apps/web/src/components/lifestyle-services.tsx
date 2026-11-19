@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { FilterChips, useQueryFilter } from '@/components/filter-chips';
 import { useAction, useResource, useSession } from '@quintara/app-core';
 import { CONCIERGE_SPECIALIST, earliestDate, leadTimeLabel, longDay, packagePriceLabel, SERVICE_REQUEST_STATUS_LABEL } from '@quintara/domain';
 import type { DirectoryEntry, LifestyleService, Partner, ServiceRequest } from '@quintara/domain';
@@ -19,7 +20,7 @@ export function LifestyleCurator() {
   const [sent, setSent] = useState<string | null>(null);
   const write = useAction((api) => api.createConciergeRequest({ category: 'personal', subject, details, neededBy: null }));
   return (
-    <section className="panel" style={{ marginBottom: '2.5rem' }} aria-label="Your Lifestyle Curator">
+    <section id="curator" className="panel" style={{ marginBottom: '2.5rem', scrollMarginTop: '9rem' }} aria-label="Your Lifestyle Curator">
       <h3>Your Lifestyle Curator</h3>
       <p style={{ marginTop: '0.8rem' }}><strong style={{ fontWeight: 500 }}>{CONCIERGE_SPECIALIST.name}</strong>, {curator.summary}. {curator.description}</p>
       {sent ? <p className="notice" role="status">Thank you. {CONCIERGE_SPECIALIST.shortName} has your message. <Link href={`/concierge/${sent}`}>Follow her reply</Link>.</p> : null}
@@ -59,8 +60,9 @@ export function LifestyleDirectory({ isMember }: { isMember: boolean }) {
   const partners = useResource((api) => (isMember ? api.listPartners() : Promise.resolve([] as Partner[])), [isMember]);
   const intro = useSection('partners');
   const privileges = useSection('privileges');
-  const [kind, setKind] = useState<Kind>('');
-  const [category, setCategory] = useState('');
+  // Kept in the address (?show=partner|service, ?category=…), so the menu's shortcuts land here. Partners are for members only.
+  const [kind, setKind] = useQueryFilter<Exclude<Kind, ''>>('show', isMember ? ['partner', 'service'] : ['service']);
+  const [category, setCategory] = useQueryFilter('category');
   const [version, setVersion] = useState(0);
   const entries: DirectoryEntry[] = [
     ...(partners.data ?? []).map((p) => ({ kind: 'partner' as const, ...p })),
@@ -74,22 +76,9 @@ export function LifestyleDirectory({ isMember }: { isMember: boolean }) {
           <h3 style={{ fontStyle: 'italic' }}>{intro.title}</h3>
           <p className="muted" style={{ margin: '0.6rem 0 0.4rem' }}>{intro.description}{isMember ? ` ${privileges.description}` : ' Members also see our partners and their privileges.'}</p>
         </div>
-        <div className="row">
-          {isMember ? (
-            <label>Show
-              <select value={kind} onChange={(event) => setKind(event.target.value as Kind)}>
-                <option value="">Partners and services</option><option value="partner">Partners</option><option value="service">Services</option>
-              </select>
-            </label>
-          ) : null}
-          <label>Category
-            <select value={category} onChange={(event) => setCategory(event.target.value)}>
-              <option value="">Every category</option>
-              {[...new Set(entries.map((e) => e.category))].sort().map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </label>
-        </div>
       </div>
+      {isMember ? <div style={{ marginTop: '1rem' }}><FilterChips label="Partners or services" value={kind} onChange={setKind} options={[['', 'Partners and services'], ['partner', 'Partners'], ['service', 'Services']]} /></div> : null}
+      {entries.length ? <FilterChips label="Category" value={category} onChange={setCategory} options={[['', 'Every category'], ...[...new Set(entries.filter((e) => !kind || e.kind === kind).map((e) => e.category))].sort().map((c) => [c, c] as const)]} /> : null}
       <ResourceView resource={services}>
         {() => !shown.length ? <p className="muted">{entries.length ? 'Nothing in this category yet.' : 'The directory will fill as partners and services join.'}</p>
           : [...new Set(shown.map((e) => e.category))].sort().map((group) => (

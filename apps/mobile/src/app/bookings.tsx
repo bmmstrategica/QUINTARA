@@ -1,13 +1,18 @@
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { View } from 'react-native';
 import { useAction, useResource } from '@quintara/app-core';
 import { BOOKING_STATUS_LABEL, formatDateTime, formatMoney } from '@quintara/domain';
 import type { Booking } from '@quintara/domain';
-import { ActionError, Body, Button, clock, confirmThen, Divider, EmptyState, Heading, Muted, ResourceView, Screen, Tag } from '@/components/ui';
+import { ActionError, Body, Button, Chips, clock, confirmThen, Divider, EmptyState, Heading, Muted, ResourceView, Screen, Tag } from '@/components/ui';
 import { useTheme } from '@/theme';
 import { useSection } from '@/components/section-copy';
 
+type Bucket = 'upcoming' | 'past' | 'cancelled';
+const bucket = (b: Booking): Bucket => (b.status === 'cancelled' || b.status === 'declined' ? 'cancelled' : Date.parse(b.startsAt) < Date.now() ? 'past' : 'upcoming');
+
 export default function BookingsScreen() {
+  const [show, setShow] = useState<Bucket | ''>('');
   const intro = useSection('bookings');
   const router = useRouter();
   const bookings = useResource((api) => api.listBookings());
@@ -16,7 +21,14 @@ export default function BookingsScreen() {
       <Muted>{intro.description}</Muted>
       <ResourceView resource={bookings} isEmpty={(list) => list.length === 0}
         empty={<EmptyState title="No bookings yet" message="Reserve a seat and it will appear here with its ticket."><Button label="Browse experiences" onPress={() => router.push('/experiences')} /></EmptyState>}>
-        {(list) => list.map((booking) => <BookingItem key={booking.id} booking={booking} onChanged={bookings.reload} />)}
+        {(list) => {
+          const count = (b: Bucket) => list.filter((x) => bucket(x) === b).length;
+          const shown = list.filter((x) => !show || bucket(x) === show);
+          return <>
+            <Chips label="Which bookings" value={show} onChange={setShow} options={[['', 'All', list.length], ['upcoming', 'Upcoming', count('upcoming')], ['past', 'Past', count('past')], ['cancelled', 'Cancelled', count('cancelled')]]} />
+            {shown.length ? shown.map((booking) => <BookingItem key={booking.id} booking={booking} onChanged={bookings.reload} />) : <Muted>Nothing here.</Muted>}
+          </>;
+        }}
       </ResourceView>
     </Screen>
   );

@@ -168,6 +168,7 @@ export function createHttpApi(options: HttpApiOptions): QuintaraApi {
     previewPlanBooking: (documentId, partySize) => request('GET', `/v1/qera/documents/${encodeURIComponent(documentId)}/booking${partySize ? `?partySize=${partySize}` : ''}`),
     bookPlan: (documentId, input) => request('POST', `/v1/qera/documents/${encodeURIComponent(documentId)}/booking`, input),
     sendQeraMessage: (text) => request('POST', '/v1/qera/messages', { text }),
+    rateQeraReply: async (messageId, helpful) => { await request('POST', `/v1/qera/messages/${encodeURIComponent(messageId)}/feedback`, { helpful }); },
     confirmQeraProposal: (proposalId) => request('POST', `/v1/qera/proposals/${id(proposalId)}/confirm`),
     cancelQeraProposal: (proposalId) => request('POST', `/v1/qera/proposals/${id(proposalId)}/cancel`),
     clearQeraThread: () => request('DELETE', '/v1/qera'),
