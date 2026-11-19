@@ -9,12 +9,12 @@
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://api-staging.quintaralifestyle.com", "EXPO_PUBLIC_WEB_URL": "https://staging.quintaralifestyle.com" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://api-staging.quintaraapp.com", "EXPO_PUBLIC_WEB_URL": "https://staging.quintaraapp.com" }
     },
     "production": {
       "autoIncrement": true,
       "android": { "buildType": "app-bundle" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://api.quintaralifestyle.com", "EXPO_PUBLIC_WEB_URL": "https://app.quintaralifestyle.com" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://api.quintaraapp.com", "EXPO_PUBLIC_WEB_URL": "https://quintaraapp.com" }
     }
   },
   "submit": {

@@ -29,7 +29,7 @@ pnpm build:store
 The script:
 1. signs you in to Expo and links the project (the first time only);
 2. builds Android and iOS together with the `production` profile in `apps/mobile/eas.json`, pointing at
-   `https://api.quintaralifestyle.com`;
+   `https://api.quintaraapp.com`;
 3. downloads the results to `builds/quintara.aab` and `builds/quintara.ipa`.
 
 The first time, it asks about credentials. Choose to let Expo:

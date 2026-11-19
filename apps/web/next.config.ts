@@ -25,7 +25,7 @@ const contentSecurityPolicy = [
  */
 function assertApiUrl(phase: string) {
   if (phase !== PHASE_PRODUCTION_BUILD || process.env.NEXT_PUBLIC_API_URL || process.env.QUINTARA_DEMO_BUILD === '1') return;
-  throw new Error('Set NEXT_PUBLIC_API_URL to the Quintara API address (for example https://api.quintaralifestyle.com) before building. For a demonstration build on sample data, set QUINTARA_DEMO_BUILD=1 instead.');
+  throw new Error('Set NEXT_PUBLIC_API_URL to the Quintara API address (for example https://api.quintaraapp.com) before building. For a demonstration build on sample data, set QUINTARA_DEMO_BUILD=1 instead.');
 }
 
 const config: NextConfig = {

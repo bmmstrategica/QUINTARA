@@ -679,7 +679,7 @@ Members and guest accounts can talk to QÉRA from WhatsApp, through the WhatsApp
 
 ## The Maison Quintara shop (apps/maison)
 
-- A separate, public website for Maison Quintara (for example `maison.quintaralifestyle.com`), built with Next.js
+- A separate, public website for Maison Quintara (for example `maison.quintaraapp.com`), built with Next.js
   like the web app, on the same API. Pieces, prices, member prices, stock, photographs and the shop's description
   come from the admin console; orders placed on it appear in the admin console's Maison Quintara orders, and a
   member's orders and wishlist are the same as in the apps. It has no data of its own.

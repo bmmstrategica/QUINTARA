@@ -9,7 +9,7 @@ Nothing has been deployed: every step marked **approval** needs Quintara's writt
 | | Item | Why it is needed |
 |---|---|---|
 | ☐ | Hosting chosen: API host (Render, Fly.io, Railway, AWS ECS or Azure), web host (Vercel or a Node host), managed PostgreSQL with point-in-time recovery, Redis | Nothing can be deployed without them |
-| ☐ | Domain and DNS access for `quintaralifestyle.com` | The four addresses and their certificates |
+| ☐ | Domain and DNS access for `quintaraapp.com` (GoDaddy) | The four addresses and their certificates |
 | ☐ | Email: a Resend account with the sending domain verified (SPF, DKIM) | Sign-in codes are sent by email; the API will not start without it |
 | ☐ | The two buckets, one **with Object Lock**: an AWS account, then one command per environment (`deploy/aws/storage.yaml`) | Photographs and the write-once audit log |
 | ☐ | Payment provider chosen, merchant account approved | Until then production refuses payments (by design) |

@@ -25,9 +25,9 @@ build (EAS Build). This keeps both platforms in step and is Expo's recommended w
 
 1. **Host.** A Node 22 host for the API (for example Render, Fly.io, Railway, AWS or Azure), managed PostgreSQL 15+,
    with daily backups. Hosting for the web app, the admin console and the Maison Quintara shop (for example Vercel).
-2. **Addresses.** The store builds expect `https://api.quintaralifestyle.com` (API) and
-   `https://app.quintaralifestyle.com` (web app); change them in `apps/mobile/eas.json` if you choose others.
-   The admin console can live at, say, `https://admin.quintaralifestyle.com`, and the shop at `https://maison.quintaralifestyle.com`. Everything must be HTTPS.
+2. **Addresses.** The store builds expect `https://api.quintaraapp.com` (API) and
+   `https://quintaraapp.com` (web app); change them in `apps/mobile/eas.json` if you choose others.
+   The admin console can live at, say, `https://admin.quintaraapp.com`, and the shop at `https://maison.quintaraapp.com`. Everything must be HTTPS.
 3. **Settings.** Set the API's settings from `.env.example`. Production refuses to start without
    `DATABASE_URL`, `AUTH_MODE=code`, `RESEND_API_KEY`, `EMAIL_FROM` and `MFA_ENCRYPTION_KEY` (two-factor; 32+ random characters, different from `CALENDAR_SECRET`). Also set `NODE_ENV=production`,
    `WEB_ORIGINS` (web app, admin console and shop addresses), `WEB_URL`, `ADMIN_URL`, `TRUST_PROXY` (behind a load balancer), `CALENDAR_SECRET`, and, when ready, the six `WHATSAPP_*`.
@@ -35,7 +35,7 @@ build (EAS Build). This keeps both platforms in step and is Expo's recommended w
    ```sh
    pnpm install
    DATABASE_URL=… pnpm --filter @quintara/api migrate
-   DATABASE_URL=… SETUP_ADMIN_EMAIL=you@quintaralifestyle.com REVIEW_EMAIL=review@quintaralifestyle.com \
+   DATABASE_URL=… SETUP_ADMIN_EMAIL=you@quintaraapp.com REVIEW_EMAIL=review@quintaraapp.com \
      pnpm --filter @quintara/api run first-run
    ```
    `first-run` opens Cape Town with the standard membership plans, creates the first administrator, and (with
@@ -113,7 +113,7 @@ Items marked **Blocking** must be done before the apps can go to the stores with
 |---|---|---|---|
 | 1 | **Blocking.** Enrol in the Apple Developer Program and Google Play Console as an organisation (D-U-N-S number needed for Apple); create an Expo account. | Quintara | To do |
 | 2 | **Blocking.** Host the API, PostgreSQL, the web app and the admin console on HTTPS; point the DNS (section 2). | Developer | To do |
-| 3 | **Blocking.** Create a Resend account, verify quintaralifestyle.com for sending (SPF, DKIM), set `RESEND_API_KEY` and `EMAIL_FROM`. Without email nobody can sign in. | Developer | To do |
+| 3 | **Blocking.** Create a Resend account, verify quintaraapp.com for sending (sender connect@quintaraapp.com) (SPF, DKIM), set `RESEND_API_KEY` and `EMAIL_FROM`. Without email nobody can sign in. | Developer | To do |
 | 4 | **Blocking for taking money.** Choose the payment provider (for example Peach Payments, Paystack or Stripe) and write its adapter for the `PaymentProvider` interface in `apps/api/src/payments.ts`. Until then production refuses payments with a plain message (development and `DEPLOY_ENV=staging` simulate them); nothing is ever marked paid without money. The hosted checkout flow (start, redirect, signed webhook, return) is built and tested; the adapter implements `HostedCheckout` for the chosen provider (docs/DELIVERY_REPORT.md, section 4b). No card details are ever stored. | Quintara and developer | To do |
 | 5 | **Blocking.** Run `migrate` and `first-run` on the production database (section 2). | Developer | To do |
 | 6 | **Blocking.** Confirm the app identifiers `com.quintara.app` (or choose others) before the first upload. | Quintara | To confirm |

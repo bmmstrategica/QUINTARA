@@ -24,7 +24,7 @@ const contentSecurityPolicy = [
  */
 function assertApiUrl(phase: string) {
   if (phase !== PHASE_PRODUCTION_BUILD || process.env.NEXT_PUBLIC_API_URL) return;
-  throw new Error('Set NEXT_PUBLIC_API_URL to the Quintara API address (for example https://api.quintaralifestyle.com) before building.');
+  throw new Error('Set NEXT_PUBLIC_API_URL to the Quintara API address (for example https://api.quintaraapp.com) before building.');
 }
 
 const config: NextConfig = {

@@ -46,7 +46,7 @@ export function checkDeployment(env: Record<string, string | undefined>): Findin
   }
   // Without WEB_URL, every link in every email would point at localhost.
   if (!get('WEB_URL')) error('Set WEB_URL to the web app\'s address: links in emails point there.');
-  if (!get('ADMIN_URL')) warn('ADMIN_URL is not set: staff emails link to https://admin.quintaralifestyle.com.');
+  if (!get('ADMIN_URL')) warn('ADMIN_URL is not set: staff emails link to https://admin.quintaraapp.com.');
   for (const key of ['WEB_URL', 'ADMIN_URL']) {
     if (get(key) && (!isHttps(get(key)) || isLocal(get(key)))) error(`${key} must be the public https:// address.`);
   }

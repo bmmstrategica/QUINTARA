@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "cd ../.. && npx --yes pnpm@12.9.1 install --frozen-lockfile --filter \"@quintara/web...\"",
+  "buildCommand": "next build"
+}

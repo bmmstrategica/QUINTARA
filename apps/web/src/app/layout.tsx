@@ -8,9 +8,14 @@ import { FooterLine } from '@/components/footer-line';
 import { SecondStepGate } from '@/components/two-factor';
 import { LapsedGate } from '@/components/membership';
 
+/** Built without an API address, the app runs on sample data in the browser (a preview; see next.config.ts). */
+const PREVIEW = !process.env.NEXT_PUBLIC_API_URL;
+
 export const metadata: Metadata = {
   title: { default: 'Quintara', template: '%s | Quintara' },
   description: 'A private membership for founders, investors, creatives and executives.',
+  // A preview on sample data is not for search engines.
+  ...(PREVIEW ? { robots: { index: false, follow: false } } : {}),
 };
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };

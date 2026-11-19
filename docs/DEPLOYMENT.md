@@ -17,8 +17,49 @@ What must be in place before launch, and in what order: [LAUNCH_CHECKLIST.md](LA
 The three web apps hold no data or secrets: they call the API, which is the only part that touches the database.
 They are deployed separately and share the one API. The architecture was not changed for any host.
 
-Suggested addresses: `api.quintaralifestyle.com`, `app.quintaralifestyle.com`, `admin.quintaralifestyle.com`,
-`maison.quintaralifestyle.com`. All HTTPS; the hosts above issue certificates automatically once DNS points at them.
+Suggested addresses: `api.quintaraapp.com`, `quintaraapp.com`, `admin.quintaraapp.com`,
+`maison.quintaraapp.com`. All HTTPS; the hosts above issue certificates automatically once DNS points at them.
+
+## Web app preview on Vercel (quintaraapp.com), before the API is hosted
+
+Approved by Quintara on 19 November 2026: the web app goes live at `quintaraapp.com` before the API, as a preview.
+Without an API address, the build runs on sample data kept in each visitor's browser, and search engines are
+asked not to index it. Nothing reaches a database and no email is sent. Payments are added later.
+
+**In Vercel** (Add New > Project > import `bmmstrategica/quintara` from GitHub):
+
+| Setting | Value |
+|---|---|
+| Root Directory | `apps/web` (install and build commands come from `apps/web/vercel.json`) |
+| Framework | Next.js (detected) |
+| Environment variable | `QUINTARA_DEMO_BUILD` = `1` (Production and Preview) |
+| Production branch | Settings > Environments > Production > Branch Tracking: `claude/gifted-wright-qapo61` (`main` still holds the original hand-over; merge it there later if you prefer `main`) |
+| Domains | Settings > Domains: add `quintaraapp.com` and `www.quintaraapp.com` (redirect `www` to `quintaraapp.com`) |
+
+**In GoDaddy** (quintaraapp.com > DNS > DNS Records). First delete GoDaddy's own `A @` ("Parked") record and its
+`CNAME www` record, then add:
+
+| Type | Name | Value | TTL |
+|---|---|---|---|
+| A | `@` | `76.76.21.21` | 1 hour |
+| CNAME | `www` | `cname.vercel-dns.com` | 1 hour |
+
+If Vercel's Domains page shows different values for this project, use the ones it shows. Vercel issues the
+certificate itself once the records resolve, usually within an hour.
+
+**Email, for when the API goes live:** sign-in codes and notifications will be sent from `connect@quintaraapp.com`
+(`EMAIL_FROM=Quintara <connect@quintaraapp.com>`). Add `quintaraapp.com` as a domain in Resend. Resend then shows
+three records to add in GoDaddy:
+- an MX record and a TXT (SPF) record, both on `send`;
+- a TXT (DKIM) record on `resend._domainkey`, whose key is unique to the account.
+
+Add also `TXT _dmarc` = `v=DMARC1; p=none;`. Those records do not affect the web app and can be added now. To
+receive replies at `connect@quintaraapp.com`, the domain also needs a mailbox, for example Microsoft 365 or Google
+Workspace through GoDaddy. Its own MX records go on `@` and do not clash with Resend's on `send`.
+
+**Going live properly, once the API is hosted:** set `NEXT_PUBLIC_API_URL=https://api.quintaraapp.com` in Vercel.
+Remove `QUINTARA_DEMO_BUILD` and redeploy. The no-index goes away by itself. Sample data kept in
+visitors' browsers is no longer used.
 
 ## Environments
 

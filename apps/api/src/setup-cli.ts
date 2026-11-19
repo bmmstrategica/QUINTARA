@@ -1,7 +1,7 @@
 /**
  * First-run setup for a new production database, after `migrate`. Safe to run again: it only adds what is missing.
  *
- *   DATABASE_URL=… SETUP_ADMIN_EMAIL=you@quintaralifestyle.com pnpm --filter @quintara/api run first-run
+ *   DATABASE_URL=… SETUP_ADMIN_EMAIL=you@quintaraapp.com pnpm --filter @quintara/api run first-run
  *
  * Creates the first city (Cape Town unless SETUP_CITY, SETUP_COUNTRY_CODE, SETUP_COUNTRY, SETUP_TIMEZONE and
  * SETUP_CURRENCY say otherwise) with the standard membership plans, and the first admin, who signs in to the admin

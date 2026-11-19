@@ -169,7 +169,7 @@ const app = await buildApp(db, {
   trustProxy: env0('TRUST_PROXY') === 'true' ? true : env0('TRUST_PROXY') || false,
   // The admin console: up to STAFF_SEATS active accounts (five unless set), and its address for new staff's emails.
   staffSeats: Math.max(1, Math.min(50, Number(env0('STAFF_SEATS')) || 5)),
-  adminUrl: env0('ADMIN_URL') || (production ? 'https://admin.quintaralifestyle.com' : 'http://localhost:3001'),
+  adminUrl: env0('ADMIN_URL') || (production ? 'https://admin.quintaraapp.com' : 'http://localhost:3001'),
   logger: true,
 });
 const calendarConfig = { fetcher: httpCalendarFetcher, secret: process.env.CALENDAR_SECRET && process.env.CALENDAR_SECRET.length >= 32 ? process.env.CALENDAR_SECRET : production ? null : 'development-only-calendar-secret-do-not-use', allowSample: !production };
@@ -199,7 +199,7 @@ const housekeeping = setInterval(() => {
   // Yesterday's audit log, copied to write-once storage (AUDIT_S3_BUCKET, with Object Lock).
   if (auditCopies) void copyDueAuditDays(db, auditCopies, { retentionDays: auditRetentionDays }).then((days) => { if (days.length) app.log.info(`Audit log copied for ${days.join(', ')}.`); }).catch((error) => app.log.error(error));
   // The weekly insights report, Monday from 07:00, to the staff who asked for it.
-  void sendWeeklyReport(db, email, env0('ADMIN_URL') || (production ? 'https://admin.quintaralifestyle.com' : 'http://localhost:3001')).catch((error) => app.log.error(error));
+  void sendWeeklyReport(db, email, env0('ADMIN_URL') || (production ? 'https://admin.quintaraapp.com' : 'http://localhost:3001')).catch((error) => app.log.error(error));
 }, 60_000);
 housekeeping.unref();
 
