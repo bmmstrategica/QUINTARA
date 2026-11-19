@@ -282,6 +282,8 @@ export async function bookPlan(db: Db, ctx: RequestContext, marketId: string, do
       let text: string;
       if (l.ref.kind === 'experience') {
         const b = await bookExperience(db, ctx, l.ref.id, l.seats);
+        // The plan was prepared by QÉRA, so what it books counts towards QÉRA's conversions.
+        await db.query(`UPDATE experience_bookings SET source = 'qera' WHERE id = $1`, [b.id]);
         text = b.status === 'awaiting_payment' ? `Seats held. Pay ${formatMoney(b.amountDueMinor, b.currency)} under Bookings.` : BOOKING_STATUS_LABEL[b.status];
       } else if (l.ref.kind === 'partner') {
         const b = await createPartnerBooking(db, ctx, { partnerId: l.ref.id, date: l.date, time: l.time, partySize: parsed.data.partySize, notes: note(l) });

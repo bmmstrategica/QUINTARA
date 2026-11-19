@@ -1398,6 +1398,13 @@ export function createMockApi(options: MockApiOptions = {}): QuintaraApi {
       });
     },
 
+    rateQeraReply: (messageId, helpful) => call(() => {
+      const messages = asGuest() ? state.guestQera : (requireMember('qera.use'), state.qera.messages);
+      const m = messages.find((x) => x.id === messageId && x.role === 'qera');
+      if (!m) throw new ApiError('not_found', 'That reply could not be found.');
+      m.feedback = helpful;
+    }),
+
     confirmQeraProposal: async (id) => {
       const pending = await call(() => {
         requireMember('qera.use');

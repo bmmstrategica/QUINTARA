@@ -2,20 +2,28 @@
 
 import { Avatar } from '@/components/media';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useAction, useResource } from '@quintara/app-core';
 import { ROLES } from '@quintara/domain';
 import type { Role } from '@quintara/domain';
 import { ResourceView } from '@/components/states';
 import { useSection } from '@/components/section-copy';
+import { FilterChips, useQueryFilter } from '@/components/filter-chips';
 
 const ROLE_LABEL: Record<Role, string> = { member: 'Members', founder: 'Founders', investor: 'Investors', creative: 'Creatives', executive: 'Executives' };
 
+const ROLE_FILTERS = ROLES.filter((name): name is Exclude<Role, 'member'> => name !== 'member');
+
 export default function MembersPage() {
+  return <Suspense><Members /></Suspense>;
+}
+
+/** The directory, filtered by role (?role=investor). The filter is applied by the server. */
+function Members() {
   const club = useSection('club');
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
-  const [role, setRole] = useState<Role | ''>('');
+  const [role, setRole] = useQueryFilter('role', ROLE_FILTERS);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search), 300);
@@ -32,15 +40,9 @@ export default function MembersPage() {
           <p className="lede">{club.description}</p>
         </div>
       </div>
-      <div className="field-row" style={{ maxWidth: '36rem', marginBottom: '1rem' }}>
+      <FilterChips label="Type of member" value={role} onChange={setRole} options={[['', 'Everyone'], ...ROLE_FILTERS.map((name) => [name, ROLE_LABEL[name]] as const)]} />
+      <div style={{ maxWidth: '36rem', marginBottom: '1rem' }}>
         <label>Search<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, company, industry or interest" /></label>
-        <label>
-          Show
-          <select value={role} onChange={(event) => setRole(event.target.value as Role | '')}>
-            <option value="">Everyone</option>
-            {ROLES.filter((name) => name !== 'member').map((name) => <option key={name} value={name}>{ROLE_LABEL[name]}</option>)}
-          </select>
-        </label>
       </div>
       <Suggestions onChanged={members.reload} />
       <ResourceView resource={members} isEmpty={(list) => list.length === 0} empty={<p className="muted">No members match. Try fewer filters.</p>}>
@@ -90,7 +92,7 @@ function Suggestions({ onChanged }: { onChanged: () => void }) {
   const matching = useSection('matching');
   if (!suggestions.data?.length) return null;
   return (
-    <section className="panel" style={{ marginBottom: '2rem' }}>
+    <section id="people-to-meet" className="panel" style={{ marginBottom: '2rem', scrollMarginTop: '9rem' }}>
       <h3>People to meet</h3>
       <p className="muted" style={{ margin: '0.6rem 0 0', fontSize: '0.9rem' }}>{matching.description}</p>
       {suggestions.data.map(({ member, reasons }) => (

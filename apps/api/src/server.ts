@@ -10,9 +10,6 @@ import { deliverEmails, MockEmailProvider, ResendEmailProvider } from './email.t
 import type { EmailProvider } from './email.ts';
 import { deliverPartnerBookings } from './partner-bookings.ts';
 import { choosePaymentProvider, takesRealPayments } from './payments.ts';
-import { RuleBasedQeraModel } from '@quintara/domain';
-import type { QeraModel } from '@quintara/domain';
-import { ClaudeQeraModel, DEFAULT_QERA_MODEL, withFallback } from './qera-claude.ts';
 import { localNow } from './time.ts';
 import { redisRateLimiter } from './ratelimit.ts';
 import { auditObjectStore, mediaObjectStore } from './objects-config.ts';
@@ -31,6 +28,7 @@ import { httpCalendarFetcher, syncDueCalendars } from './calendar.ts';
 import { seed } from './seed.ts';
 import { CloudApiWhatsAppProvider, MockWhatsAppProvider } from './whatsapp.ts';
 import type { WhatsAppConfig } from './whatsapp.ts';
+import { providersFromEnv } from './qera-gateway/providers.ts';
 
 const production = process.env.NODE_ENV === 'production';
 // In production, every setting is checked before anything starts: all the problems are listed at once, then it stops.
@@ -120,18 +118,6 @@ const apiUrl = env0('API_URL') || (production ? '' : `http://localhost:${process
 const payments = choosePaymentProvider({ production, deployEnv: env0('DEPLOY_ENV'), mode: env0('PAYMENTS'), apiUrl, secret: env0('PAYMENTS_TEST_SECRET') });
 if (production && !takesRealPayments(payments)) console.warn(`Payments: ${payments.name}${payments.hosted ? ' (test checkout)' : ''}. No money can be taken until a payment provider is configured.`);
 
-// QÉRA's language model. With ANTHROPIC_API_KEY set, Claude answers (QERA_MODEL chooses the model; QERA_MODEL=rules keeps
-// the built-in rule-based model). The rule-based model always stands behind it, so QÉRA answers even if the API cannot
-// be reached. The key never leaves the server.
-let qeraModel: QeraModel | undefined;
-if (env0('ANTHROPIC_API_KEY') && env0('QERA_MODEL') !== 'rules') {
-  const effort = (['low', 'medium', 'high'] as const).find((e) => e === env0('QERA_EFFORT'));
-  const zone = env0('SETUP_TIMEZONE') || 'Africa/Johannesburg';
-  qeraModel = withFallback(new ClaudeQeraModel({ model: env0('QERA_MODEL') || DEFAULT_QERA_MODEL, effort, today: () => localNow(zone).today }), new RuleBasedQeraModel(),
-    (error) => console.error('QÉRA model unavailable; answered with the rule-based model.', error instanceof Error ? error.message : error));
-  console.log(`QÉRA: ${qeraModel.name}, with the rule-based model as fallback.`);
-}
-
 // Sign-in attempts per address per minute (10). Development and test runs may raise it (SIGN_IN_LIMIT); production never.
 const signInLimit = !production && Number(env0('SIGN_IN_LIMIT')) > 0 ? Number(env0('SIGN_IN_LIMIT')) : undefined;
 
@@ -162,7 +148,6 @@ if (production && !auditCopies) console.warn('Audit log: no copies outside the d
 const app = await buildApp(db, {
   rateLimiter,
   objects,
-  qeraModel,
   signInLimit,
   webOrigins: (process.env.WEB_ORIGINS ?? 'http://localhost:3000,http://localhost:3001,http://localhost:3002').split(',').map((origin) => origin.trim()),
   authMode,
@@ -170,6 +155,9 @@ const app = await buildApp(db, {
   secureCookies: production,
   payments,
   push,
+  // QÉRA's hosted models: ANTHROPIC_API_KEY, OPENAI_API_KEY and/or GEMINI_API_KEY. They are used only once an
+  // administrator turns hosted models on in the QÉRA Control Centre; until then QÉRA runs on its built-in rules.
+  llmProviders: providersFromEnv(process.env),
   // Replace with the real mail service's adapter (see email.ts). The stand-in sends nothing.
   email,
   webUrl,

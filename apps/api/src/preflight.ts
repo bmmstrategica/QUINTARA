@@ -83,7 +83,7 @@ export function checkDeployment(env: Record<string, string | undefined>): Findin
     if (get(`${prefix}_BUCKET`) && (!get(`${prefix}_ACCESS_KEY_ID`) || !get(`${prefix}_SECRET_ACCESS_KEY`))) warn(`${prefix}_BUCKET is set without its own keys: the host's default credentials will be used.`);
   }
   if (!get('CALENDAR_SECRET')) warn('CALENDAR_SECRET is not set: members cannot connect a calendar to QÉRA.');
-  if (!get('ANTHROPIC_API_KEY')) warn('ANTHROPIC_API_KEY is not set: QÉRA uses its built-in rule-based model.');
+  if (!['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY'].some((key) => get(key))) warn('No hosted model key is set (ANTHROPIC_API_KEY, OPENAI_API_KEY or GEMINI_API_KEY): QÉRA answers from its built-in rules.');
   const whatsapp = ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_BUSINESS_NUMBER', 'WHATSAPP_NUMBER_SECRET'];
   const setCount = whatsapp.filter((key) => get(key)).length;
   if (setCount > 0 && setCount < whatsapp.length) error(`WhatsApp needs all six settings; missing: ${whatsapp.filter((key) => !get(key)).join(', ')}.`);

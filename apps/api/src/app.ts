@@ -28,6 +28,9 @@ import * as members from './members.ts';
 import * as messaging from './messaging.ts';
 import { payMembershipFee } from './membership.ts';
 import * as qera from './qera.ts';
+import * as qeraControl from './qera-control.ts';
+import { GatewayQeraModel } from './qera-gateway/model.ts';
+import type { LlmProvider, ProviderName } from './qera-gateway/providers.ts';
 import { search } from './search.ts';
 import * as notifications from './notifications.ts';
 import * as push from './push.ts';
@@ -87,8 +90,10 @@ export interface AppConfig {
   /** Object storage for photographs (S3-compatible). Without it, photographs are kept in the database. */
   objects?: ObjectStore;
   signInLimit?: number;
-  /** The language model behind QÉRA. Defaults to the built-in rule-based stand-in. */
+  /** The language model behind QÉRA. Defaults to the model gateway over `llmProviders`, falling back to the rule-based stand-in. */
   qeraModel?: QeraModel;
+  /** Hosted model providers with keys on the server. None: QÉRA runs on the rule-based model alone. */
+  llmProviders?: Partial<Record<ProviderName, LlmProvider>>;
   /** Messages to QÉRA allowed per member per minute. */
   qeraLimit?: number;
   /** First orders by guests allowed per address per minute. */
@@ -469,7 +474,25 @@ export async function buildApp(db: Db, config: AppConfig): Promise<FastifyInstan
   app.post<{ Params: { id: string } }>('/v1/boutique/orders/:id/cancel', (request) => boutique.cancelOrder(db, request.ctx, config.payments, request.params.id));
 
   /* ---------- QÉRA ---------- */
-  const qeraModel = config.qeraModel ?? new RuleBasedQeraModel();
+  // The model gateway: hosted models chosen in the QÉRA Control Centre, with the rule-based model as the fallback.
+  const gateway = config.qeraModel ? null : new GatewayQeraModel(db, config.llmProviders ?? {}, new RuleBasedQeraModel());
+  const qeraModel: QeraModel = config.qeraModel ?? gateway!;
+  app.post<{ Params: { id: string } }>('/v1/qera/messages/:id/feedback', (request, reply) => noContent(qeraControl.giveFeedback(db, request.ctx, request.params.id, request.body), reply));
+  /* ---------- Staff: the QÉRA Control Centre ---------- */
+  app.get<{ Querystring: { days?: string } }>('/admin/v1/qera/dashboard', (request) => qeraControl.getDashboard(db, request.ctx, request.query.days));
+  app.get('/admin/v1/qera/settings', (request) => qeraControl.getSettings(db, request.ctx, gateway));
+  app.put('/admin/v1/qera/settings', (request) => qeraControl.updateSettings(db, request.ctx, gateway, request.body));
+  app.get('/admin/v1/qera/prompts', (request) => qeraControl.listPrompts(db, request.ctx));
+  app.post('/admin/v1/qera/prompts', (request) => qeraControl.createPrompt(db, request.ctx, request.body));
+  app.post<{ Params: { id: string } }>('/admin/v1/qera/prompts/:id/publish', (request, reply) => noContent(qeraControl.publishPrompt(db, request.ctx, gateway, request.params.id === 'built-in' ? null : request.params.id), reply));
+  app.get('/admin/v1/qera/knowledge', (request) => qeraControl.listKnowledge(db, request.ctx));
+  app.post('/admin/v1/qera/knowledge', (request) => qeraControl.createKnowledge(db, request.ctx, request.body));
+  app.put<{ Params: { id: string } }>('/admin/v1/qera/knowledge/:id', (request) => qeraControl.updateKnowledge(db, request.ctx, request.params.id, request.body));
+  app.delete<{ Params: { id: string } }>('/admin/v1/qera/knowledge/:id', (request, reply) => noContent(qeraControl.deleteKnowledge(db, request.ctx, request.params.id), reply));
+  app.get<{ Querystring: { failed?: string } }>('/admin/v1/qera/model-calls', (request) => qeraControl.listModelCalls(db, request.ctx, request.query.failed === 'true'));
+  app.get('/admin/v1/qera/escalations', (request) => qeraControl.listEscalations(db, request.ctx));
+  app.get('/admin/v1/qera/conversations', (request) => qeraControl.listConversations(db, request.ctx));
+  app.post<{ Params: { userId: string } }>('/admin/v1/qera/conversations/:userId/read', (request) => qeraControl.readConversation(db, request.ctx, request.params.userId, request.body));
   app.get('/v1/qera', (request) => qera.getThread(db, request.ctx, config.guestQeraSeconds));
   app.get('/v1/qera/memory', (request) => chief.getMemory(db, request.ctx));
   app.post('/v1/qera/memory', (request) => chief.addMemory(db, request.ctx, request.body));

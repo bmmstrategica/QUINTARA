@@ -101,6 +101,17 @@ and live delivery of messages. The admin app covers
 applications, members, tiers, payments, experiences, guest lists, check-in, reports and insights; content has no screen yet. The concurrency test runs on a single in-memory
 connection, so repeat it against a real PostgreSQL before relying on it.
 
+## QÉRA, the Chief of Staff
+
+QÉRA runs behind a provider-agnostic model gateway (`apps/api/src/qera-gateway/`): Anthropic, OpenAI and Gemini
+adapters tried in the order set in the admin console's **QÉRA Control Centre**, with the built-in rule-based model as
+the fallback whenever hosted models are off, over budget, over a member's hourly limit or unavailable. The model can
+only ask for tools the member is allowed; every action is a proposal the member confirms. The Control Centre shows the
+dashboard, QÉRA's referrals to the Lifestyle Curator, the knowledge base QÉRA answers from, settings (models, autonomy
+level, budget, escalation amount), versioned prompts, the model call log, and conversations (opened only with a
+recorded reason, with private details hidden). See [docs/QERA_ARCHITECTURE.md](docs/QERA_ARCHITECTURE.md) for the
+architecture, risk register and what remains before hosted models go live.
+
 ## How the apps reach data
 
 Screens depend only on the `QuintaraApi` interface in `packages/api-client`.
@@ -842,8 +853,9 @@ Passcode fallback, and "Sign out" on the lock screen.
   and the work waiting (applications, renewals, seats, concierge and service requests, partner bookings, orders),
   each section for the roles that may see it. Counts only.
 - **Payments in production** are refused until a real provider is configured; nothing is marked paid without money.
-- **QÉRA on Claude** (`apps/api/src/qera-claude.ts`) when `ANTHROPIC_API_KEY` is set on the API, behind the same
-  safeguards, with the rule-based model as fallback.
+- **QÉRA's hosted models** go through the model gateway (`apps/api/src/qera-gateway/`, docs/QERA_ARCHITECTURE.md),
+  turned on and configured in the console's QÉRA Control Centre, behind the same safeguards, with the rule-based
+  model as fallback. (An earlier Claude-only adapter was replaced by the gateway.)
 - Booking an experience that has started is refused. Sample experience dates follow today (`sampleDate`).
 - `GET /ready` (database check), `apps/api/Dockerfile`, CI in `.github/workflows/ci.yml`, browser journeys in `e2e/`.
 - Admin console on phones: tables scroll in place instead of widening every page.

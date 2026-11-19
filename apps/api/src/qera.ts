@@ -21,6 +21,9 @@ import type { PaymentProvider } from './payments.ts';
 import { search } from './search.ts';
 import { addMemory, bookPlan, createReminder, deleteMemory, getWeeklyBrief, memoryItems, previewPlanBooking, reminderWhen } from './chief.ts';
 import { marketNow, zonedInstant } from './time.ts';
+import { searchKnowledge } from './qera-control.ts';
+import { loadSettings } from './qera-gateway/model.ts';
+import type { GatewayQeraModel } from './qera-gateway/model.ts';
 
 const PROPOSAL_MINUTES = 15;
 const HISTORY = 60;
@@ -30,10 +33,11 @@ const NEEDS: Record<QeraToolName, Permission> = {
   book_experience: 'experiences.book', cancel_booking: 'experiences.book', create_concierge_request: 'concierge.request', request_connection: 'connections.request',
   about_quintara: 'qera.use', list_services: 'qera.use', recommend: 'qera.use', list_partner_bookings: 'privileges.use', create_itinerary: 'qera.use', book_partner: 'privileges.use', request_service: 'concierge.request',
   list_memory: 'qera.use', remember: 'profile.edit', forget: 'profile.edit', set_reminder: 'qera.use', weekly_brief: 'qera.use', book_plan: 'experiences.book',
+  search_knowledge: 'qera.use',
 };
 
 /** What a guest may ask QÉRA to look up. No actions, no member data, and nothing a visitor could not see. */
-const GUEST_TOOLS: QeraToolName[] = ['about_quintara', 'list_services', 'list_experiences', 'recommend', 'search'];
+const GUEST_TOOLS: QeraToolName[] = ['about_quintara', 'list_services', 'list_experiences', 'recommend', 'search', 'search_knowledge'];
 
 /** Who QÉRA is talking to: an active member, or a signed-in guest account. Anyone else is turned away. */
 interface Viewer { userId: string; audience: QeraAudience }
@@ -48,7 +52,13 @@ function choosePackage(service: QeraService, said: string) {
   return service.packages?.find((p) => p.name.toLowerCase().split(/\s+/).filter((w) => w.length > 3).some((w) => text.includes(w))) ?? service.packages?.[0] ?? null;
 }
 
-function toolbox(db: Db, ctx: RequestContext, payments: PaymentProvider, marketId: string): QeraToolbox {
+/** The parts of the Control Centre settings the tools need. */
+interface ToolPolicy { autonomyLevel: number; knowledgeEnabled: boolean; escalateAboveMinor: number }
+const OPEN_POLICY: ToolPolicy = { autonomyLevel: 3, knowledgeEnabled: true, escalateAboveMinor: Number.MAX_SAFE_INTEGER };
+/** Actions still offered below level 3: handing something to a person is always allowed. */
+const ALWAYS_ALLOWED: QeraToolName[] = ['create_concierge_request'];
+
+function toolbox(db: Db, ctx: RequestContext, payments: PaymentProvider, marketId: string, policy: ToolPolicy = OPEN_POLICY): QeraToolbox {
   const guest = !ctx.session && Boolean(ctx.guest);
   const when = (iso: string, zone: string) => { const d = formatDateTime(iso, zone); return `${d.long}, ${d.time}`; };
   const localDay = (iso: string, zone: string) => new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
@@ -168,6 +178,7 @@ function toolbox(db: Db, ctx: RequestContext, payments: PaymentProvider, marketI
       run: async (args: { text: string; date: string; time: string }) => { const r = await createReminder(db, ctx, args, 'qera'); return { text: `Done. I will remind you on ${reminderWhen(r.remindAt, (await marketNow(db, ctx.session?.marketId ?? marketId)).zone)}.` }; },
     },
     weekly_brief: { run: async () => ({ data: await getWeeklyBrief(db, ctx) }) },
+    search_knowledge: { run: async ({ query }: { query: string }) => ({ data: await searchKnowledge(db, guest ? 'guest' : 'member', marketId, query) }) },
     book_plan: {
       summarise: async ({ documentId, partySize }: { documentId: string; partySize: number }) => {
         const preview = await previewPlanBooking(db, ctx, documentId, partySize);
@@ -189,11 +200,14 @@ function toolbox(db: Db, ctx: RequestContext, payments: PaymentProvider, marketI
       summarise: async ({ experienceId, seats }: { experienceId: string; seats: number }) => {
         const e = await getExperience(db, ctx, experienceId);
         if (seats > e.maxSeatsPerBooking) throw conflict(`${e.title} allows up to ${e.maxSeatsPerBooking} seat${e.maxSeatsPerBooking > 1 ? 's' : ''} per booking.`);
+        // Above the amount Quintara lets QÉRA arrange on its own, a person takes over.
+        if (e.memberPriceMinor * seats > policy.escalateAboveMinor) throw conflict(`That comes to ${formatMoney(e.memberPriceMinor * seats, e.currency)}, which is more than I arrange on my own. Say “refer it to the curator” and ${CONCIERGE_SPECIALIST.shortName} will take it from here.`);
         const cost = e.memberPriceMinor ? `${formatMoney(e.memberPriceMinor * seats, e.currency)} will be due, which you pay yourself under Bookings.` : 'It is complimentary.';
         return `I can reserve ${seats} seat${seats > 1 ? 's' : ''} at ${e.title} on ${when(e.startsAt!, e.timezone)}. ${cost}`;
       },
       run: async ({ experienceId, seats }: { experienceId: string; seats: number }) => {
         const b = await bookExperience(db, ctx, experienceId, seats);
+        await db.query(`UPDATE experience_bookings SET source = 'qera' WHERE id = $1`, [b.id]);
         const next = b.status === 'awaiting_payment' ? ` Your seats are held: pay ${formatMoney(b.amountDueMinor, b.currency)} under Bookings to confirm them.` : b.status === 'confirmed' ? ` Your ticket code is ${b.ticketCode}.` : '';
         return { text: `Done. ${b.experienceTitle}: ${BOOKING_STATUS_LABEL[b.status].toLowerCase()}.${next}` };
       },
@@ -211,31 +225,35 @@ function toolbox(db: Db, ctx: RequestContext, payments: PaymentProvider, marketI
     },
     create_concierge_request: {
       summarise: async ({ subject }: { subject: string }) => `This is one for your Lifestyle Curator. I can refer it to ${CONCIERGE_SPECIALIST.name} at the concierge desk: “${subject}”. She will reply with options.`,
-      run: async (args: { category: string; subject: string; details: string }) => { const r = await createRequest(db, ctx, { ...args, neededBy: null }); return { text: `Done. ${CONCIERGE_SPECIALIST.shortName} has your request, “${r.subject}”. You can follow it under Concierge.` }; },
+      run: async (args: { category: string; subject: string; details: string }) => { const r = await createRequest(db, ctx, { ...args, neededBy: null }, 'qera'); return { text: `Done. ${CONCIERGE_SPECIALIST.shortName} has your request, “${r.subject}”. You can follow it under Concierge.` }; },
     },
     request_connection: {
       summarise: async ({ memberId }: { memberId: string }) => { const m = await getMember(db, ctx, memberId); return `I can ask ${m.fullName} to connect with you. They decide whether to accept.`; },
       run: async ({ memberId }: { memberId: string }) => { const m = await requestConnection(db, ctx, memberId); return { text: m.connection === 'connected' ? `Done. You and ${m.fullName} are now connected.` : `Done. ${m.fullName} has been asked.` }; },
     },
   };
-  if (guest) return Object.fromEntries(Object.entries(all).filter(([name]) => GUEST_TOOLS.includes(name as QeraToolName))) as QeraToolbox;
-  return Object.fromEntries(Object.entries(all).filter(([name]) => can({ roles: ctx.roles }, NEEDS[name as QeraToolName]))) as QeraToolbox;
+  // What the Control Centre allows: knowledge on or off, and the autonomy level (below 3, nothing is proposed but a referral).
+  const allowed = (name: QeraToolName) => (name !== 'search_knowledge' || policy.knowledgeEnabled)
+    && (policy.autonomyLevel >= 3 || QERA_TOOLS[name].kind === 'read' || ALWAYS_ALLOWED.includes(name))
+    && (policy.autonomyLevel >= 2 || name !== 'create_itinerary');
+  if (guest) return Object.fromEntries(Object.entries(all).filter(([name]) => GUEST_TOOLS.includes(name as QeraToolName) && allowed(name as QeraToolName))) as QeraToolbox;
+  return Object.fromEntries(Object.entries(all).filter(([name]) => can({ roles: ctx.roles }, NEEDS[name as QeraToolName]) && allowed(name as QeraToolName))) as QeraToolbox;
 }
 
 export async function getThread(db: Db, ctx: RequestContext, guestLimit?: number, usage?: QeraUsage): Promise<QeraThread> {
   const session = viewer(ctx);
   await db.query(`UPDATE qera_proposals SET status = 'cancelled', decided_at = now() WHERE user_id = $1 AND status = 'pending' AND expires_at <= now()`, [session.userId]);
-  const rows = await db.query(`SELECT id, role, body, created_at, channel FROM (SELECT * FROM qera_messages WHERE user_id = $1 ORDER BY created_at DESC, (role = 'member') ASC, id DESC LIMIT $2) recent ORDER BY created_at, (role = 'member') DESC, id`, [session.userId, HISTORY]);
+  const rows = await db.query(`SELECT recent.id, role, body, recent.created_at, channel, f.helpful FROM (SELECT * FROM qera_messages WHERE user_id = $1 ORDER BY created_at DESC, (role = 'member') ASC, id DESC LIMIT $2) recent LEFT JOIN qera_feedback f ON f.message_id = recent.id ORDER BY recent.created_at, (role = 'member') DESC, recent.id`, [session.userId, HISTORY]);
   const pending = (await db.query(`SELECT id, tool, summary, expires_at FROM qera_proposals WHERE user_id = $1 AND status = 'pending'`, [session.userId]))[0];
   return {
-    messages: rows.map((row) => ({ id: row.id as string, role: row.role as 'member' | 'qera', text: row.body as string, sentAt: new Date(row.created_at as string).toISOString(), ...(row.channel === 'whatsapp' ? { via: 'whatsapp' as const } : {}) })),
+    messages: rows.map((row) => ({ id: row.id as string, role: row.role as 'member' | 'qera', text: row.body as string, sentAt: new Date(row.created_at as string).toISOString(), ...(row.channel === 'whatsapp' ? { via: 'whatsapp' as const } : {}), ...(row.helpful === null || row.helpful === undefined ? {} : { feedback: Boolean(row.helpful) }) })),
     pending: pending ? { id: pending.id as string, tool: pending.tool as QeraToolName, summary: pending.summary as string, expiresAt: new Date(pending.expires_at as string).toISOString() } : null,
     usage: session.audience === 'guest' ? usage ?? await guestUsage(db, session.userId, guestLimit) : null,
   };
 }
 
 // Within the same instant, the member's message comes before QÉRA's reply.
-const say = (db: Db, userId: string, role: 'member' | 'qera', body: string, channel: Channel = 'app') => db.query('INSERT INTO qera_messages (user_id, role, body, channel) VALUES ($1, $2, $3, $4)', [userId, role, body.slice(0, 4000), channel]);
+const say = (db: Db, userId: string, role: 'member' | 'qera', body: string, channel: Channel = 'app', model: string | null = null) => db.query('INSERT INTO qera_messages (user_id, role, body, channel, model) VALUES ($1, $2, $3, $4, $5)', [userId, role, body.slice(0, 4000), channel, model]);
 /** Where the member wrote: the app, or WhatsApp. The conversation is one and the same. */
 export type Channel = 'app' | 'whatsapp';
 
@@ -251,15 +269,22 @@ export async function sendMessage(db: Db, ctx: RequestContext, model: QeraModel,
   }
   // A new message replaces anything that was waiting for an answer: an old proposal can never be confirmed by accident.
   await db.query(`UPDATE qera_proposals SET status = 'superseded', decided_at = now() WHERE user_id = $1 AND status = 'pending'`, [session.userId]);
+  // The last few exchanges, so a hosted model can follow the conversation. Read before the new message is stored.
+  const history = (await db.query<{ role: 'member' | 'qera'; body: string }>(`SELECT role, body FROM (SELECT role, body, created_at, id FROM qera_messages WHERE user_id = $1 ORDER BY created_at DESC, (role = 'member') ASC, id DESC LIMIT 12) recent ORDER BY created_at, (role = 'member') DESC, id`, [session.userId]))
+    .map((m) => ({ role: m.role, text: m.body }));
   await say(db, session.userId, 'member', parsed.data.text, channel);
-  const turn = await qeraTurn(model, toolbox(db, ctx, payments, marketId), parsed.data.text, session.audience);
-  for (const tool of turn.used) await audit(db, session.userId, 'qera.tool_used', 'user', session.userId, { tool, model: model.name });
+  const settings = await loadSettings(db);
+  // A gateway is bound to this person, so its calls are counted and limited per member.
+  const bound = 'forUser' in model && typeof (model as GatewayQeraModel).forUser === 'function' ? (model as GatewayQeraModel).forUser(session.userId) : model;
+  const turn = await qeraTurn(bound, toolbox(db, ctx, payments, marketId, settings), parsed.data.text, session.audience, history);
+  const answeredBy = 'lastModel' in bound ? (bound as { lastModel: string }).lastModel : model.name;
+  for (const tool of turn.used) await audit(db, session.userId, 'qera.tool_used', 'user', session.userId, { tool, model: answeredBy });
   if (turn.proposal) {
     const id = (await db.query<{ id: string }>(`INSERT INTO qera_proposals (user_id, tool, args, summary, expires_at) VALUES ($1, $2, $3::jsonb, $4, now() + make_interval(mins => $5)) RETURNING id`,
       [session.userId, turn.proposal.tool, JSON.stringify(turn.proposal.args), turn.proposal.summary, PROPOSAL_MINUTES]))[0]!.id;
     await audit(db, session.userId, 'qera.proposed', 'qera_proposal', id, { tool: turn.proposal.tool, channel });
   }
-  await say(db, session.userId, 'qera', turn.reply, channel);
+  await say(db, session.userId, 'qera', turn.reply, channel, answeredBy);
   return getThread(db, ctx, guestLimit, usage);
 }
 
@@ -281,7 +306,8 @@ export async function decideProposal(db: Db, ctx: RequestContext, payments: Paym
     await audit(db, session.userId, 'qera.declined', 'qera_proposal', id, { tool: claimed[0].tool, channel });
     return getThread(db, ctx);
   }
-  const tool = toolbox(db, ctx, payments, marketId)[claimed[0].tool];
+  // The settings as they are now: a proposal made before the autonomy level was lowered is not carried out.
+  const tool = toolbox(db, ctx, payments, marketId, await loadSettings(db))[claimed[0].tool];
   let text: string;
   try {
     if (!tool || QERA_TOOLS[claimed[0].tool].kind !== 'action') throw new HttpError(403, 'That is not something I can do for you.');

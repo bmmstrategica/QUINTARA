@@ -2,22 +2,50 @@
 
 import type { StaffClosure, StaffMember, StaffReport } from '@quintara/api-client';
 import { REPORT_REASON_LABELS } from '@quintara/domain';
+import { useState } from 'react';
 import { fmtDate, Loaded, useAdmin, useCan, useLoad, useRun } from '@/lib/admin';
+
+const ROLES = [['founder', 'Founders'], ['investor', 'Investors'], ['creative', 'Creatives'], ['executive', 'Executives']] as const;
+type RoleFilter = '' | (typeof ROLES)[number][0];
+type Standing = '' | 'active' | 'suspended' | 'resigned';
+
+/** A row of filter chips: the chosen one is filled. */
+function Filters<T extends string>({ label, value, onChange, options }: { label: string; value: T; onChange: (v: T) => void; options: readonly (readonly [T, string, number])[] }) {
+  return (
+    <div className="chip-filters" role="group" aria-label={label}>
+      <span className="label">{label}</span>
+      {options.map(([v, text, n]) => <button type="button" key={v || 'all'} className="chip" aria-pressed={v === value} onClick={() => onChange(v)}>{text} · {n}</button>)}
+    </div>
+  );
+}
 
 export default function MembersPage() {
   const { api } = useAdmin();
   const state = useLoad((api) => api.listMembers());
+  const [role, setRole] = useState<RoleFilter>('');
+  const [standing, setStanding] = useState<Standing>('');
+  const [search, setSearch] = useState('');
   return (
     <>
       <div><h1>Members</h1><p className="lede">Suspending a member ends their sessions at once. Investor access is granted here, after verification, never by applying.</p></div>
       <div className="row"><a className="btn ghost" href={api.membersExportUrl()}>Export members as CSV</a><span className="muted" style={{ fontSize: 13 }}>Personal information: each export is recorded in the audit log.</span></div>
       <Loaded state={state}>
-        {(members) => (
+        {(members) => {
+          const q = search.trim().toLowerCase();
+          const shown = members.filter((m) => (!role || m.roles.includes(role)) && (!standing || m.status === standing)
+            && (!q || `${m.fullName} ${m.memberNumber} ${m.email}`.toLowerCase().includes(q)));
+          return <>
+          <Filters label="Type" value={role} onChange={setRole} options={[['', 'All', members.length], ...ROLES.map(([r, l]) => [r, l, members.filter((m) => m.roles.includes(r)).length] as const)]} />
+          <Filters label="Standing" value={standing} onChange={setStanding} options={[['', 'All', members.length], ['active', 'Active', members.filter((m) => m.status === 'active').length], ['suspended', 'Suspended', members.filter((m) => m.status === 'suspended').length], ['resigned', 'Closed', members.filter((m) => m.status === 'resigned').length]]} />
+          <label style={{ maxWidth: 360 }}>Search<input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, member number or email" /></label>
+          {shown.length === 0 ? <p className="muted">No members match.</p> : (
           <div className="scroll"><table>
             <thead><tr><th>Member</th><th>Tier</th><th>Founder</th><th>Investor</th><th>Creative</th><th>Executive</th><th>Standing</th><th></th></tr></thead>
-            <tbody>{members.map((m) => <MemberRow key={m.id} member={m} onChanged={state.reload} />)}</tbody>
+            <tbody>{shown.map((m) => <MemberRow key={m.id} member={m} onChanged={state.reload} />)}</tbody>
           </table></div>
-        )}
+          )}
+          </>;
+        }}
       </Loaded>
       <Reports onChanged={state.reload} />
       <Closures onChanged={state.reload} />

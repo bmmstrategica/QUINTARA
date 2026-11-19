@@ -111,6 +111,10 @@ export const STAFF_PERMISSIONS = [
   'admin.staff.manage',
   // The full audit log of every member of staff. Everyone sees their own activity.
   'admin.audit.view',
+  // The QÉRA Control Centre: its dashboard, escalations and knowledge base.
+  'admin.qera.view',
+  // Changing how QÉRA runs (models, prompts, autonomy, limits), editing its knowledge, and reading conversations.
+  'admin.qera.manage',
 ] as const;
 export type StaffPermission = (typeof STAFF_PERMISSIONS)[number];
 
@@ -125,7 +129,8 @@ export const STAFF_ROLE_PERMISSIONS: Readonly<Record<StaffRole, readonly StaffPe
   // Experiences Manager: experiences, pricing and availability, guest lists, reservations and check-in.
   experiences: ['admin.experiences.manage', 'admin.bookings.manage'],
   // Concierge Manager: the concierge desk, service requests, partner bookings and the service providers.
-  concierge: ['admin.concierge.manage', 'admin.providers.manage', 'admin.bookings.manage', 'admin.experiences.manage'],
+  // ...and sees the QÉRA Control Centre (its dashboard, escalations and knowledge base), as the desk picks up what QÉRA escalates.
+  concierge: ['admin.concierge.manage', 'admin.providers.manage', 'admin.bookings.manage', 'admin.experiences.manage', 'admin.qera.view'],
   // Finance Manager: tiers and fees, the payments ledger, renewals, and the figures.
   finance: ['admin.finance.manage', 'admin.insights.view'],
   // Content Manager: what members read and see: TV, the home page, descriptions, partners and services, Maison Quintara.
@@ -140,11 +145,11 @@ export const STAFF_ROLE_LABELS: Readonly<Record<StaffRole, string>> = {
 };
 
 export const STAFF_ROLE_NOTES: Readonly<Record<StaffRole, string>> = {
-  admin: 'Everything, including staff accounts, cities, money and the full audit log.',
+  admin: 'Everything, including staff accounts, cities, money, the QÉRA Control Centre and the full audit log.',
   executive_admin: 'The dashboard and Insights, applications, members, money, Business, experiences and the full audit log. Not staff accounts or cities.',
   membership: 'Applications, the application questions, members, their roles and member reports.',
   experiences: 'Experiences, pricing and availability, guest lists, reservations and check-in.',
-  concierge: 'Concierge requests, service requests, partner bookings, partners and services, experiences, guest lists and check-in.',
+  concierge: 'Concierge requests, service requests, partner bookings, partners and services, experiences, guest lists and check-in, and the QÉRA Control Centre (view).',
   finance: 'Membership tiers and fees, the payments ledger, renewals, the dashboard and Insights.',
   content: 'Quintara TV, the home page, descriptions, partners and services, and Maison Quintara with its orders.',
   support: 'Concierge and service requests, guest lists and check-in.',
@@ -1486,6 +1491,7 @@ export function sectionText(list: readonly SectionCopy[] | undefined, key: Secti
 }
 
 export * from './qera.ts';
+export * from './qera-control.ts';
 export * from './whatsapp.ts';
 
 /* ---------- Paying through a hosted checkout ---------- */

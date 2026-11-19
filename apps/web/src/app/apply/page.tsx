@@ -96,7 +96,7 @@ function ApplicationForm({ draft, plans, questions, onSubmitted }: { draft: Appl
   const current = steps[step];
 
   return (
-    <div className="split">
+    <div className="split centred wide">
       <div>
         <h2>Apply for membership</h2>
         <p className="lede" style={{ marginTop: '1rem' }}>{intro.description}</p>
@@ -286,7 +286,7 @@ function ApplicationStatusView({ application, onChanged }: { application: Applic
     active: 'Your membership is active. Welcome to Quintara.',
   };
   return (
-    <div className="split">
+    <div className="split centred">
       <div>
         <h2>Your application</h2>
         <p className="lede" style={{ marginTop: '1rem' }}>{messages[application.status]}</p>

@@ -94,6 +94,8 @@ function Chat({ initial, guest }: { initial: QeraThread; guest: boolean }) {
   const exhausted = Boolean(usage?.exhausted) || send.error?.code === 'forbidden';
   const decide = useAction((api, id: string, yes: boolean) => (yes ? api.confirmQeraProposal(id) : api.cancelQeraProposal(id)));
   const busy = send.pending || decide.pending;
+  // A thumbs up or down on a reply, seen only by Quintara to improve QÉRA.
+  const rate = useAction(async (api, id: string, helpful: boolean) => { await api.rateQeraReply(id, helpful); return true; });
   const router = useRouter();
   const documents = useResource((api) => (guest ? Promise.resolve([]) : api.listQeraDocuments()), [thread]);
   const bookings = useResource((api) => (guest ? Promise.resolve([]) : api.listPartnerBookings()), [thread]);
@@ -106,7 +108,8 @@ function Chat({ initial, guest }: { initial: QeraThread; guest: boolean }) {
       {guest ? <Button quiet label="QÉRA on WhatsApp" onPress={() => router.push('/whatsapp')} /> : null}
       {guest ? null : <ChiefPanels version={thread.messages.length} />}
       {thread.messages.length === 0 ? <Bubble mine={false} body={guest ? QERA_GUEST_HELP : QERA_HELP} meta="QÉRA" /> : null}
-      {thread.messages.map((m) => <Bubble key={m.id} mine={m.role === 'member'} body={m.text} meta={`${m.role === 'member' ? 'You' : 'QÉRA'}, ${clock(m.sentAt)}${m.via === 'whatsapp' ? ', on WhatsApp' : ''}`} />)}
+      {thread.messages.map((m) => <Bubble key={m.id} mine={m.role === 'member'} body={m.text} meta={`${m.role === 'member' ? 'You' : 'QÉRA'}, ${clock(m.sentAt)}${m.via === 'whatsapp' ? ', on WhatsApp' : ''}`}
+        {...(m.role === 'qera' ? { rated: m.feedback, onRate: (helpful: boolean) => { void rate.run(m.id, helpful).then((done) => { if (done) setThread((t) => ({ ...t, messages: t.messages.map((x) => (x.id === m.id ? { ...x, feedback: helpful } : x)) })); }); } } : {})} />)}
       {thread.pending ? (
         <>
           <Divider />

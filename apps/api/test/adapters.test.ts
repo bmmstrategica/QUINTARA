@@ -1,6 +1,7 @@
 /**
  * The adapters for outside services, run for real against local stand-ins that answer as each provider's published
- * API does: Resend (email), the WhatsApp Cloud API, Expo push, a calendar host, and the Claude Messages API.
+ * API does: Resend (email), the WhatsApp Cloud API, Expo push, a calendar host, and Anthropic's Messages API (through
+ * QÉRA's model gateway).
  * What is checked is what goes over the wire (address, credentials, body) and what happens when the service fails.
  * The services themselves still need confirming with real credentials in staging (docs/DEPLOYMENT.md).
  */
@@ -9,12 +10,12 @@ import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
-import Anthropic from '@anthropic-ai/sdk';
 import { httpCalendarFetcher } from '../src/calendar.ts';
 import { deliverEmails, ResendEmailProvider } from '../src/email.ts';
 import { dispatchPush, ExpoPushProvider } from '../src/push.ts';
 import type { PushMessage, PushProvider } from '../src/push.ts';
-import { ClaudeQeraModel } from '../src/qera-claude.ts';
+import { AnthropicProvider, ProviderError } from '../src/qera-gateway/providers.ts';
+import type { LlmRequest } from '../src/qera-gateway/providers.ts';
 import { CloudApiWhatsAppProvider } from '../src/whatsapp.ts';
 import { startServer } from './harness.ts';
 
@@ -172,38 +173,28 @@ test('calendar fetch: reads a calendar; refuses redirects, error answers and ove
   } finally { await host.close(); }
 });
 
-test('Claude: the request QÉRA sends to the Messages API, and how it reads a tool call, a reply and a refusal', async () => {
+test('Anthropic, through the QÉRA gateway: the request on the wire, and a tool call, a reply, a refusal and a cut-off answer', async () => {
   const answers = [
-    { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'toolu_1', name: 'list_experiences', input: {} }] },
+    { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'toolu_1', name: 'list_experiences', input: { when: 'this week' } }] },
     { stop_reason: 'end_turn', content: [{ type: 'text', text: 'The Aura Enclave is on Friday.' }] },
     { stop_reason: 'refusal', content: [] },
+    { stop_reason: 'max_tokens', content: [{ type: 'tool_use', id: 'toolu_2', name: 'book_experience', input: {} }] },
   ];
-  const api = await standIn((_, res) => {
-    const next = answers.shift()!;
-    json(res, 200, { id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-opus-5-5', stop_sequence: null, usage: { input_tokens: 10, output_tokens: 5 }, ...next });
-  });
+  const api = await standIn((_, res) => json(res, 200, { id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', usage: { input_tokens: 12, output_tokens: 7 }, ...answers.shift()! }));
   try {
-    const model = new ClaudeQeraModel({ client: new Anthropic({ apiKey: 'sk-ant-test', baseURL: api.url, maxRetries: 0 }), today: () => '2026-11-10' });
-    const step = await model.next({ message: 'What is on this week?', results: [], tools: ['list_experiences'] });
-    assert.deepEqual(step, { toolCall: { name: 'list_experiences', args: {} } });
-    const request = api.seen[0]!;
-    // The SDK in use (1.x) sends the key as a bearer token; the beta goes in the anthropic-beta header.
-    assert.deepEqual([request.method, request.url, request.headers.authorization], ['POST', '/v1/messages', 'Bearer sk-ant-test']);
-    assert.match(String(request.headers['anthropic-beta']), /server-side-fallback-2026-07-01/);
-    assert.equal(request.body.model, 'claude-opus-5-5');
-    assert.equal(request.body.max_tokens, 16_000);
-    assert.equal(request.body.fallbacks, 'default');
-    assert.deepEqual(request.body.tool_choice, { type: 'auto', disable_parallel_tool_use: true });
-    assert.equal(request.body.tools[0].name, 'list_experiences');
-    assert.equal(request.body.tools[0].input_schema.type, 'object');
-    assert.deepEqual(request.body.system[0].cache_control, { type: 'ephemeral' });                      // the fixed prompt is cached
-    assert.equal(request.body.thinking, undefined);                                                     // left to the model's default
-
-    // With the tool's result, the conversation is sent back with the call and its answer.
-    const reply = await model.next({ message: 'What is on this week?', results: [{ name: 'list_experiences', args: {}, data: [{ title: 'The Aura Enclave' }] }], tools: ['list_experiences'] });
-    assert.deepEqual(reply, { reply: 'The Aura Enclave is on Friday.' });
-    assert.deepEqual(api.seen[1]!.body.messages.map((m: { role: string }) => m.role), ['user', 'assistant', 'user']);
-    assert.equal(api.seen[1]!.body.messages[2].content[0].type, 'tool_result');
-    assert.match((await model.next({ message: 'Something else', results: [], tools: [] }) as { reply: string }).reply, /concierge desk/);
+    const provider = new AnthropicProvider('sk-ant-test', fetch, api.url);
+    const request: LlmRequest = { model: 'claude-sonnet-5-5', system: 'You are QÉRA.', maxTokens: 16_000, timeoutMs: 5000,
+      tools: [{ name: 'list_experiences', description: 'What is on', parameters: { type: 'object', properties: { when: { type: 'string' } } } }],
+      messages: [{ role: 'user', text: 'What is on this week?' }] };
+    assert.deepEqual(await provider.complete(request), { toolCall: { name: 'list_experiences', args: { when: 'this week' } }, inputTokens: 12, outputTokens: 7 });
+    const sent = api.seen[0]!;
+    assert.deepEqual([sent.method, sent.url, sent.headers['x-api-key'], sent.headers['anthropic-version']], ['POST', '/v1/messages', 'sk-ant-test', '2023-06-01']);
+    assert.deepEqual([sent.body.model, sent.body.max_tokens, sent.body.system], ['claude-sonnet-5-5', 16_000, 'You are QÉRA.']);
+    assert.deepEqual(sent.body.tools[0], { name: 'list_experiences', description: 'What is on', input_schema: { type: 'object', properties: { when: { type: 'string' } } } });
+    assert.deepEqual(await provider.complete(request), { text: 'The Aura Enclave is on Friday.', inputTokens: 12, outputTokens: 7 });
+    // Declined by the model: a polite answer rather than an empty one.
+    assert.match((await provider.complete(request)).text!, /concierge desk/);
+    // Cut off by the token ceiling: refused, so the gateway tries the next provider instead of acting on half a tool call.
+    await assert.rejects(provider.complete(request), (e: unknown) => e instanceof ProviderError && /cut off/.test(e.message));
   } finally { await api.close(); }
 });

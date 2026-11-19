@@ -1,14 +1,30 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
-import { useApi, usePermission, useResource } from '@quintara/app-core';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { FilterChips, useQueryFilter } from '@/components/filter-chips';
+import { useApi, usePermission, useResource, useSession } from '@quintara/app-core';
 import { formatDuration } from '@quintara/domain';
 import type { TvEpisode } from '@quintara/domain';
 import { ResourceView } from '@/components/states';
 import { useSection } from '@/components/section-copy';
 
 export default function TvPage() {
+  return <Suspense><Tv /></Suspense>;
+}
+
+type Show = 'continue' | 'new' | 'watched';
+const SHOW_LABEL: Record<Show, string> = { continue: 'Continue watching', new: 'New to you', watched: 'Watched' };
+const shows = (show: Show | null) => (e: TvEpisode) => show === null
+  || (show === 'continue' ? e.positionSeconds > 0 && !e.completed : show === 'watched' ? e.completed : e.positionSeconds === 0 && !e.completed);
+
+/** The menu's Media filters arrive as ?show=continue, ?show=new or ?show=watched, and narrow the episodes listed. */
+function Tv() {
+  const { session, guest } = useSession();
+  const signedIn = Boolean(session || guest);
+  // Continue watching and Watched need an account; anyone can see what is new to them.
+  const [value, setShow] = useQueryFilter<Show>('show', signedIn ? ['continue', 'new', 'watched'] : ['new']);
+  const show = value || null;
   const series = useResource((api) => api.listTvSeries());
   const [playing, setPlaying] = useState<TvEpisode | null>(null);
   const intro = useSection('tv');
@@ -16,11 +32,12 @@ export default function TvPage() {
     <>
       <div className="head"><div><h2>Quintara TV</h2><p className="lede">{intro.description}</p></div></div>
       {playing ? <Player episode={playing} onClose={() => { setPlaying(null); series.reload(); }} /> : null}
+      <FilterChips label="Which episodes" value={value} onChange={setShow} options={[['', 'Everything'], ...(signedIn ? [['continue', SHOW_LABEL.continue] as const] : []), ['new', SHOW_LABEL.new], ...(signedIn ? [['watched', SHOW_LABEL.watched] as const] : [])]} />
       <ResourceView resource={series} isEmpty={(list) => list.length === 0} empty={<p className="muted">The first series is in production.</p>}>
-        {(list) => list.map((s) => (
+        {(list) => show && !list.some((s) => s.episodes.some(shows(show))) ? <p className="muted">{show === 'continue' ? 'Nothing half-watched. Episodes you start appear here.' : show === 'watched' ? 'Episodes you finish appear here.' : 'You have seen every episode so far.'}</p> : list.filter((s) => s.episodes.some(shows(show))).map((s) => (
           <section key={s.id} style={{ marginBottom: '2.5rem' }}>
             <div className="cover" style={{ minHeight: '11rem', marginBottom: '0.5rem' }}><span className="tag">Series</span><h1 style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>{s.title}</h1><p className="lede" style={{ margin: 0 }}>{s.summary}</p></div>
-            {s.episodes.map((e) => <EpisodeRow key={e.id} episode={e} active={playing?.id === e.id} onPlay={() => { setPlaying(e); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />)}
+            {s.episodes.filter(shows(show)).map((e) => <EpisodeRow key={e.id} episode={e} active={playing?.id === e.id} onPlay={() => { setPlaying(e); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />)}
           </section>
         ))}
       </ResourceView>

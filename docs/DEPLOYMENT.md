@@ -56,8 +56,7 @@ in the repository. `.env.example` lists them all with notes.
 | `DEPLOY_ENV` | | `staging` lets a staging deployment use the test checkout. |
 | `API_URL` | staging | The API's own public address, for the test checkout's links. |
 | `PAYMENTS` | optional | Development and staging: `simulated` charges at once instead of the test checkout. |
-| `ANTHROPIC_API_KEY` | optional | QÉRA answers with Claude. Without it, the built-in rule-based model. |
-| `QERA_MODEL`, `QERA_EFFORT` | optional | Claude model (default `claude-opus-5-5`; `rules` keeps the rule-based model) and thinking effort. |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` | optional | QÉRA's hosted models, any or none. Used only once an administrator turns hosted models on in the console's QÉRA Control Centre, which also sets the providers' order, the models, the daily budget and each member's hourly limit. Otherwise, and whenever every provider fails, QÉRA answers from its built-in rules (docs/QERA_ARCHITECTURE.md). |
 | `WHATSAPP_*` (six) | optional | QÉRA on WhatsApp; all six or none. |
 | `PUSH`, `EXPO_ACCESS_TOKEN` | optional | Push notifications through Expo. |
 | `REVIEW_EMAIL`, `REVIEW_CODE`, `REVIEW_2FA_CODE` | app review only | The fixed-code account for App Store and Play reviewers. |
@@ -106,7 +105,7 @@ A stand-in cannot prove the real service accepts the request, so with real keys 
 | Email (Resend) | Sign in by code with a real address. | The code arrives from `EMAIL_FROM`, not in spam. `email_outbox` shows it `sent`. |
 | Push (Expo) | Install a staging build, sign in, and tap "Send a test notification" in the app's notification settings. | The phone shows it. A removed app's device is switched off after the next push. |
 | WhatsApp (Cloud API) | Link a number from the app, then send "hello" to the business number. | QÉRA answers. Meta's webhook dashboard shows deliveries answered 200. |
-| QÉRA on Claude | Ask QÉRA "What is on this week?" | A reply naming real experiences. The API log shows no fallback to the rule-based model. |
+| QÉRA's hosted models | Turn hosted models on in the QÉRA Control Centre; ask QÉRA "What is on this week?" | A reply naming real experiences. The Control Centre's model calls show the provider answering, with its cost. |
 | Calendars | Connect a Google or Outlook private address. | Today's events appear in the daily brief within half an hour. |
 | Payments | After the provider is chosen: pay, decline and refund with its test cards. | As the e2e checkout journeys, with the provider's own pages. |
 | Photographs and audit copies (S3) | Upload a photograph; wait a day. | It is served; `audit:check-copies` reports the day's copy. |
@@ -199,7 +198,7 @@ It refuses to run unless CI passed for that commit. A production run also needs:
 
 | Kind | Names |
 |---|---|
-| Secrets | `DATABASE_URL` (the restricted role), `MIGRATION_DATABASE_URL` (the owner), `RESEND_API_KEY`, `MFA_ENCRYPTION_KEY`, `CALENDAR_SECRET`, `REDIS_URL`, `API_DEPLOY_HOOK_URL`, `WEB_DEPLOY_HOOK_URL`, `ADMIN_DEPLOY_HOOK_URL`, `MAISON_DEPLOY_HOOK_URL`; as used: `PAYMENTS_TEST_SECRET` (staging), `ANTHROPIC_API_KEY`, `EXPO_ACCESS_TOKEN`, `WHATSAPP_NUMBER_SECRET`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `MEDIA_S3_ACCESS_KEY_ID`, `MEDIA_S3_SECRET_ACCESS_KEY`, `AUDIT_S3_ACCESS_KEY_ID`, `AUDIT_S3_SECRET_ACCESS_KEY` |
+| Secrets | `DATABASE_URL` (the restricted role), `MIGRATION_DATABASE_URL` (the owner), `RESEND_API_KEY`, `MFA_ENCRYPTION_KEY`, `CALENDAR_SECRET`, `REDIS_URL`, `API_DEPLOY_HOOK_URL`, `WEB_DEPLOY_HOOK_URL`, `ADMIN_DEPLOY_HOOK_URL`, `MAISON_DEPLOY_HOOK_URL`; as used: `PAYMENTS_TEST_SECRET` (staging), `ANTHROPIC_API_KEY`, `EXPO_ACCESS_TOKEN`, `WHATSAPP_NUMBER_SECRET`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `MEDIA_S3_ACCESS_KEY_ID`, `MEDIA_S3_SECRET_ACCESS_KEY`, `AUDIT_S3_ACCESS_KEY_ID`, `AUDIT_S3_SECRET_ACCESS_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` |
 | Variables | `API_URL`, `WEB_URL`, `ADMIN_URL`, `MAISON_URL`, `WEB_ORIGINS`, `EMAIL_FROM`, `TRUST_PROXY=true`; as used: `MEDIA_S3_BUCKET`, `AUDIT_S3_BUCKET`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_NUMBER` |
 | Protection | `production`: required reviewers (at least one person who is not the one starting the run), and only the default branch may deploy |
 

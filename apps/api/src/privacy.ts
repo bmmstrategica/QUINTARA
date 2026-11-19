@@ -72,18 +72,20 @@ export async function exportMyData(db: Queryable, ctx: RequestContext): Promise<
     all(`SELECT number_last4 AS number_ends_with, linked_at FROM whatsapp_links WHERE user_id = $1 AND status = 'linked'`, [u]),
   ]);
   // Phones registered for push (never the push token), what is pushed, the saved card (brand, last four, expiry) and the renewal choice.
-  const [pushDevices, pushSettings, savedCard, renewal] = await Promise.all([
+  const [pushDevices, pushSettings, savedCard, renewal, qeraFeedback] = await Promise.all([
     all('SELECT platform, device_name, created_at, last_seen_at FROM push_devices WHERE user_id = $1 AND disabled_at IS NULL ORDER BY created_at', [u]),
     all('SELECT muted AS not_pushed, show_details AS details_on_lock_screen FROM push_settings WHERE user_id = $1', [u]),
     all('SELECT brand, last4, exp_month, exp_year, created_at FROM payment_methods WHERE user_id = $1 AND removed_at IS NULL', [u]),
     all('SELECT term_ends_at, auto_renew FROM members WHERE user_id = $1', [u]),
+    // What the member said about QÉRA's answers (helpful or not, and any comment).
+    all('SELECT helpful, comment, created_at FROM qera_feedback WHERE user_id = $1 ORDER BY created_at', [u]),
   ]);
   await audit(db, u, 'privacy.data_exported', 'user', u);
   return {
     exportedAt: new Date().toISOString(), email: session.email, profile: profile[0] ?? null, membership: membership[0] ?? null, privacy: await getPrivacy(db, ctx),
     applications, bookings, payments, conciergeRequests: requests, conciergeMessages: deskMessages, connections, messagesSent: messages, notifications,
     consentHistory: consents, blockedMembers: blocks, reportsMade: reports, boutiqueOrders: orders, qeraConversation: assistant, relationshipManagerEnquiries: enquiries, serviceRequests: services, partnerBookings, qeraDocuments: documents, qeraMemory: memory, qeraReminders: reminders, calendar: calendar[0] ?? null, calendarEvents, whatsapp: whatsapp[0] ?? null,
-    pushNotifications: { phones: pushDevices, settings: pushSettings[0] ?? null }, membershipRenewal: renewal[0] ?? null, savedCard: savedCard[0] ?? null,
+    pushNotifications: { phones: pushDevices, settings: pushSettings[0] ?? null }, membershipRenewal: renewal[0] ?? null, savedCard: savedCard[0] ?? null, qeraFeedback,
   };
 }
 

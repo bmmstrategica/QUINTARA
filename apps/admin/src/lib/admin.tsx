@@ -68,6 +68,7 @@ export function Loaded<T>({ state, children }: { state: { data?: T; error?: ApiE
 /** Each page and who may open it: any one of its permissions, or every member of staff (none listed). */
 const NAV: [href: string, label: string, permissions: StaffPermission[]][] = [
   ['/', 'Overview', []],
+  ['/qera', 'QÉRA Control Centre', ['admin.qera.view']],
   ['/cities', 'Cities', ['admin.markets.manage']],
   ['/applications', 'Applications', ['admin.applications.review']],
   ['/questions', 'Application questions', ['admin.applications.review']],

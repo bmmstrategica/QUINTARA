@@ -2,19 +2,28 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useAction, useResource } from '@quintara/app-core';
 import { CONCIERGE_CATEGORIES, CONCIERGE_CATEGORY_LABEL, CONCIERGE_STATUS_LABEL, conciergeRequestSchema } from '@quintara/domain';
 import type { ConciergeCategory, ConciergeRequestInput, ConciergeStatus } from '@quintara/domain';
 import { ActionError, ResourceView } from '@/components/states';
 import { useSection } from '@/components/section-copy';
+import { FilterChips, useQueryFilter } from '@/components/filter-chips';
+
+const DONE: ConciergeStatus[] = ['completed', 'cancelled'];
+const REQUEST_FILTERS = ['open', 'done'] as const;
 
 const TONE: Record<ConciergeStatus, string> = { requested: 'accent', reviewing: 'accent', options_provided: 'accent', confirmed: 'positive', completed: 'positive', cancelled: '' };
 
 export default function ConciergePage() {
+  return <Suspense><Concierge /></Suspense>;
+}
+
+function Concierge() {
   const desk = useSection('concierge');
   const router = useRouter();
   const requests = useResource((api) => api.listConciergeRequests());
+  const [show, setShow] = useQueryFilter('show', REQUEST_FILTERS);
   const create = useAction((api, input: ConciergeRequestInput) => api.createConciergeRequest(input));
   const [form, setForm] = useState({ category: 'hospitality' as ConciergeCategory, subject: '', details: '', neededBy: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -63,12 +72,14 @@ export default function ConciergePage() {
       <section className="panel">
         <h3>Your requests</h3>
         <ResourceView resource={requests} isEmpty={(list) => list.length === 0} empty={<p className="muted" style={{ paddingTop: '0.8rem' }}>Nothing yet. Your requests and the desk&rsquo;s replies appear here.</p>}>
-          {(list) => list.map((r) => (
+          {(list) => <>
+            <div style={{ paddingTop: '0.9rem' }}><FilterChips label="Which requests" value={show} onChange={setShow} options={[['', 'All', list.length], ['open', 'In hand', list.filter((r) => !DONE.includes(r.status)).length], ['done', 'Finished', list.filter((r) => DONE.includes(r.status)).length]]} /></div>
+            {list.filter((r) => !show || (show === 'done') === DONE.includes(r.status)).map((r) => (
             <div className="panel-item" key={r.id}>
               <div><strong style={{ fontWeight: 500 }}>{r.subject}</strong><small>{CONCIERGE_CATEGORY_LABEL[r.category]}. {r.messages.length} message{r.messages.length === 1 ? '' : 's'}.</small></div>
               <div className="row"><span className={`tag ${TONE[r.status]}`}>{CONCIERGE_STATUS_LABEL[r.status]}</span><Link className="btn quiet small" href={`/concierge/${r.id}`}>Open</Link></div>
             </div>
-          ))}
+          ))}</>}
         </ResourceView>
       </section>
     </div>

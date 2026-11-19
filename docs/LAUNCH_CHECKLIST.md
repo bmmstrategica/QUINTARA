@@ -13,7 +13,7 @@ Nothing has been deployed: every step marked **approval** needs Quintara's writt
 | ☐ | Email: a Resend account with the sending domain verified (SPF, DKIM) | Sign-in codes are sent by email; the API will not start without it |
 | ☐ | The two buckets, one **with Object Lock**: an AWS account, then one command per environment (`deploy/aws/storage.yaml`) | Photographs and the write-once audit log |
 | ☐ | Payment provider chosen, merchant account approved | Until then production refuses payments (by design) |
-| ☐ | Optional services: Anthropic API key (QÉRA on Claude), Meta WhatsApp Business (QÉRA on WhatsApp), Expo access token | Each works without them in a lesser form; see DEPLOYMENT.md |
+| ☐ | Optional services: hosted model keys for QÉRA (Anthropic, OpenAI and/or Google, turned on in the QÉRA Control Centre), Meta WhatsApp Business (QÉRA on WhatsApp), Expo access token | Each works without them in a lesser form; see DEPLOYMENT.md |
 | ☐ | Apple Developer and Google Play accounts | Mobile apps (RELEASE.md) |
 | ☐ | GitHub: the `staging` and `production` environments, reviewers on `production`: one command (`deploy/github/environments.sh <reviewers>`) by a repository admin | The release workflow's secrets and its approval gate |
 | ☐ | The people: first Super Administrator, and a second (so a lost phone cannot lock everyone out) | First-run, then the console |

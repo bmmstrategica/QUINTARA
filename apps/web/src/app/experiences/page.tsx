@@ -1,17 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { Suspense } from 'react';
 import { usePermission, useResource } from '@quintara/app-core';
 import type { BookingStatus } from '@quintara/domain';
 import { ExperienceRow } from '@/components/experience';
 import { EmptyState, ResourceView } from '@/components/states';
 import { useSection } from '@/components/section-copy';
+import { FilterChips, useQueryFilter } from '@/components/filter-chips';
 
 export default function ExperiencesPage() {
+  return <Suspense><Experiences /></Suspense>;
+}
+
+/** Experiences, filtered by type (?category=). The types come from what is on the calendar. */
+function Experiences() {
   const canBook = usePermission('experiences.book');
   const intro = useSection('experiences');
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useQueryFilter('category');
   const resource = useResource(async (api) => {
     const [experiences, bookings] = await Promise.all([api.listExperiences(), canBook ? api.listBookings() : Promise.resolve([])]);
     return { experiences, bookings };
@@ -24,16 +30,12 @@ export default function ExperiencesPage() {
           <h2>Experiences</h2>
           <p className="lede">{canBook ? intro.description : 'Some experiences are kept for members. Apply to see the full calendar.'}</p>
         </div>
-        {resource.status === 'ready' ? (
-          <label style={{ minWidth: '12rem' }}>
-            Category
-            <select value={category} onChange={(event) => setCategory(event.target.value)}>
-              <option value="">All categories</option>
-              {[...new Set(resource.data.experiences.map((e) => e.category))].map((name) => <option key={name}>{name}</option>)}
-            </select>
-          </label>
-        ) : null}
       </div>
+      {resource.status === 'ready' && resource.data.experiences.length ? (() => {
+        const all = resource.data.experiences;
+        const types = [...new Set(all.map((e) => e.category))].sort();
+        return <FilterChips label="Type of experience" value={category} onChange={setCategory} options={[['', 'All', all.length], ...types.map((t) => [t, t, all.filter((e) => e.category === t).length] as const)]} />;
+      })() : null}
       <ResourceView
         resource={resource}
         isEmpty={({ experiences }) => experiences.length === 0}

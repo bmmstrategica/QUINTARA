@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { useResource } from '@quintara/app-core';
 import { CONCIERGE_SPECIALIST, SERVICE_REQUEST_STATUS_LABEL } from '@quintara/domain';
 import type { DirectoryEntry } from '@quintara/domain';
-import { Body, Button, Choice, Heading, Muted, ResourceView, Row, Screen, Tag, Title } from '@/components/ui';
+import { Body, Button, Chips, Heading, Muted, ResourceView, Row, Screen, Tag, Title } from '@/components/ui';
 import { useSection } from '@/components/section-copy';
 
 type Kind = 'all' | 'partner' | 'service';
@@ -21,10 +21,12 @@ export default function LifestyleScreen() {
   const services = useResource((api) => api.listLifestyleServices());
   const requests = useResource((api) => api.listMyServiceRequests());
   const [kind, setKind] = useState<Kind>('all');
-  const entries: DirectoryEntry[] = [
+  const [category, setCategory] = useState('');
+  const ofKind: DirectoryEntry[] = [
     ...(partners.data ?? []).map((p) => ({ kind: 'partner' as const, ...p })),
     ...(services.data ?? []).map((x) => ({ kind: 'service' as const, ...x })),
   ].filter((e) => kind === 'all' || e.kind === kind);
+  const entries = ofKind.filter((e) => !category || e.category === category);
   return (
     <Screen onRefresh={() => { partners.reload(); redemptions.reload(); services.reload(); requests.reload(); }} refreshing={partners.status === 'loading'}>
       <Title>Lifestyle</Title>
@@ -34,7 +36,8 @@ export default function LifestyleScreen() {
       <Button quiet label={`Write to ${CONCIERGE_SPECIALIST.shortName}`} onPress={() => router.push('/concierge/new')} />
       <Heading>{directory.title}</Heading>
       <Muted>{directory.description} {privileges.description}</Muted>
-      <Choice label="Show" options={[['all', 'Everything'], ['partner', 'Partners'], ['service', 'Services']] as const} value={kind} onChange={(v) => setKind(v as Kind)} />
+      <Chips label="Partners or services" options={[['all', 'Everything'], ['partner', 'Partners'], ['service', 'Services']] as const} value={kind} onChange={(v) => { setKind(v); setCategory(''); }} />
+      {ofKind.length ? <Chips label="Category" value={category} onChange={setCategory} options={[['', 'Every category'], ...[...new Set(ofKind.map((e) => e.category))].sort().map((c) => [c, c] as const)]} /> : null}
       <ResourceView resource={services}>
         {() => !entries.length ? <Muted>The directory will fill as partners and services join.</Muted> : [...new Set(entries.map((e) => e.category))].sort().map((group) => (
           <View key={group} style={{ gap: 6 }}>

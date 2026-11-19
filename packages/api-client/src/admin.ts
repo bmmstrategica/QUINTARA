@@ -4,6 +4,7 @@ import type { TvEpisode, TvEpisodeInput, TvSeries, TvSeriesInput,
   PartnerBooking, HomeSlide, LifestyleService, LifestyleServiceInput, ServicePackage, ServicePackageInput, ServiceRequest, ServiceRequestStatus,
   BusinessListing, BusinessPerson, BusinessRole, BusinessUpdate, BusinessUpdateInput, ListingEdit, RmEnquiry, Introduction,
   Admission, ApplicationData, ApplicationStatus, ConciergeRequest, ConciergeStatus, Experience, Partner, PartnerInput, Privilege, PrivilegeInput, PublishStatus, ReportReason, StaffRole, Market, MarketInput, SectionCopy, SectionCopyInput, SectionKey, Residency, ApplicationQuestions, BuiltinQuestionKey, BuiltinQuestionInput, CustomQuestionInput, TwoFactorStatus, TwoFactorSetup } from '@quintara/domain';
+import type { QeraConversationSummary, QeraConversationView, QeraDashboard, QeraEscalation, QeraKnowledgeEntry, QeraKnowledgeInput, QeraModelCall, QeraPromptVersion, QeraSettingsInput, QeraSettingsView } from '@quintara/domain';
 import { createRequester, queryString } from './http.ts';
 import type { HttpApiOptions } from './http.ts';
 
@@ -126,6 +127,23 @@ export interface ExperienceInput {
 
 export interface AdminApi {
   getSession(): Promise<StaffSession | null>;
+  /* The QÉRA Control Centre. */
+  getQeraDashboard(days?: number): Promise<QeraDashboard>;
+  getQeraSettings(): Promise<QeraSettingsView>;
+  updateQeraSettings(input: QeraSettingsInput): Promise<QeraSettingsView>;
+  listQeraPrompts(): Promise<QeraPromptVersion[]>;
+  createQeraPrompt(input: { body: string; note?: string }): Promise<QeraPromptVersion>;
+  /** `null` goes back to the built-in prompt. */
+  publishQeraPrompt(id: string | null): Promise<void>;
+  listQeraKnowledge(): Promise<QeraKnowledgeEntry[]>;
+  createQeraKnowledge(input: QeraKnowledgeInput): Promise<QeraKnowledgeEntry>;
+  updateQeraKnowledge(id: string, input: QeraKnowledgeInput): Promise<QeraKnowledgeEntry>;
+  deleteQeraKnowledge(id: string): Promise<void>;
+  listQeraModelCalls(failedOnly?: boolean): Promise<QeraModelCall[]>;
+  listQeraEscalations(): Promise<QeraEscalation[]>;
+  listQeraConversations(): Promise<QeraConversationSummary[]>;
+  /** Recorded in the audit log with the reason. */
+  readQeraConversation(userId: string, reason: string): Promise<QeraConversationView>;
   /** Every city, open or not, with counts. */
   listMarkets(): Promise<StaffMarket[]>;
   /** Adds a city, closed. */
@@ -286,6 +304,20 @@ export function createAdminApi(options: HttpApiOptions): AdminApi {
   const id = encodeURIComponent;
   return {
     getSession: () => request('GET', '/admin/v1/session'),
+    getQeraDashboard: (days = 30) => request('GET', `/admin/v1/qera/dashboard?days=${days}`),
+    getQeraSettings: () => request('GET', '/admin/v1/qera/settings'),
+    updateQeraSettings: (input) => request('PUT', '/admin/v1/qera/settings', input),
+    listQeraPrompts: () => request('GET', '/admin/v1/qera/prompts'),
+    createQeraPrompt: (input) => request('POST', '/admin/v1/qera/prompts', input),
+    publishQeraPrompt: async (promptId) => { await request('POST', `/admin/v1/qera/prompts/${id(promptId ?? 'built-in')}/publish`); },
+    listQeraKnowledge: () => request('GET', '/admin/v1/qera/knowledge'),
+    createQeraKnowledge: (input) => request('POST', '/admin/v1/qera/knowledge', input),
+    updateQeraKnowledge: (entryId, input) => request('PUT', `/admin/v1/qera/knowledge/${id(entryId)}`, input),
+    deleteQeraKnowledge: async (entryId) => { await request('DELETE', `/admin/v1/qera/knowledge/${id(entryId)}`); },
+    listQeraModelCalls: (failedOnly = false) => request('GET', `/admin/v1/qera/model-calls${failedOnly ? '?failed=true' : ''}`),
+    listQeraEscalations: () => request('GET', '/admin/v1/qera/escalations'),
+    listQeraConversations: () => request('GET', '/admin/v1/qera/conversations'),
+    readQeraConversation: (userId, reason) => request('POST', `/admin/v1/qera/conversations/${id(userId)}/read`, { reason }),
     listMarkets: () => request('GET', '/admin/v1/markets'),
     createMarket: (input) => request('POST', '/admin/v1/markets', input),
     setMarketOpen: (marketId, isOpen) => request('PATCH', `/admin/v1/markets/${encodeURIComponent(marketId)}`, { isOpen }),

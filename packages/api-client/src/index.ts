@@ -218,6 +218,8 @@ export interface QuintaraApi {
   sendQeraMessage(text: string): Promise<QeraThread>;
   confirmQeraProposal(id: string): Promise<QeraThread>;
   cancelQeraProposal(id: string): Promise<QeraThread>;
+  /** The member's thumbs up or down on one of QÉRA's replies. Seen only by Quintara, to improve QÉRA. */
+  rateQeraReply(messageId: string, helpful: boolean): Promise<void>;
   clearQeraThread(): Promise<void>;
   /** Plans and itineraries QÉRA has prepared for the member. */
   listQeraDocuments(): Promise<QeraDocumentSummary[]>;
