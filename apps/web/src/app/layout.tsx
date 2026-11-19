@@ -40,7 +40,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Providers>
           <Header />
           <main id="main"><SecondStepGate><LapsedGate>{children}</LapsedGate></SecondStepGate></main>
-          <footer><img src="/quintara-wordmark.png" alt="Quintara" height={12} /><FooterLine /></footer>
+          <footer><img src="/quintara-wordmark.png" alt="Quintara" height={16} /><FooterLine /></footer>
         </Providers>
       </body>
     </html>
