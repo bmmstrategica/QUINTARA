@@ -203,9 +203,9 @@ test('a message appears for the other member without reloading, with an unread d
   await expect(thandi.getByText(body)).toBeVisible();
 
   // The unread dot reaches Aisha's header within the polling interval, without a reload.
-  const messagesLink = aisha.locator('nav[aria-label=Main] a[href="/messages"]');
+  const messagesLink = aisha.locator('header .bar-tools a[href="/messages"]');
   await expect(messagesLink.locator('.dot')).toBeVisible({ timeout: 40_000 });
-  await expect(messagesLink).toContainText('unread');
+  await expect(messagesLink).toHaveAccessibleName(/^Messages, \d+ unread$/);
 
   // Open on both sides: Thandi's next message arrives on Aisha's screen by itself.
   await messagesLink.click();
@@ -366,7 +366,7 @@ test('finance refund part of a payment from the ledger; the member is told, and 
   await finance.getByRole('combobox', { name: /^Refund/ }).selectOption('part');
   await finance.getByLabel(/^Amount, in/).fill('100');
   await finance.getByLabel('Reason, kept in the audit log').fill('The view was blocked by scaffolding.');
-  await finance.getByRole('button', { name: /^Refund R/ }).click();
+  await finance.locator('.refund-form').getByRole('button', { name: /^Refund R/ }).click();
   await expect(row.getByText(/returned/)).toBeVisible();
 
   await member.goto(`${WEB}/notifications`);

@@ -370,6 +370,43 @@ repository. The order of launch is in [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md)
 Still needed from Quintara: hosting, DNS, email, buckets, GitHub environments and reviewers, a payment provider, and
 written approval for production (LAUNCH_CHECKLIST.md, sections 1, 2 and 4).
 
+## 4i. The QÉRA intelligence core, merged (19 November 2026)
+
+An update supplied as a zip was merged into the branch. It was a full copy of the project built on the original
+hand-over, so it was recorded as one commit on the original (`qera-zip-update`) and merged with git: nothing from
+either side was dropped, and every overlap was resolved by hand. It brings the QÉRA model gateway (Anthropic, OpenAI and
+Gemini, with fallback, a daily cost cap and a per-member limit), the QÉRA Control Centre in the console, feedback on
+answers, bookings attributed to QÉRA, the web app's new header and menu with filter chips, and an updated mockup
+(docs/QERA_ARCHITECTURE.md).
+
+**Reconciled:**
+- **Migration number:** 0033 renumbered 0040, after this branch's 0033 to 0039.
+- **Staff roles:** the zip's QÉRA permissions carried into the eight-role model. The Super Administrator has
+  everything; the Concierge Manager can view the Control Centre, as the zip gave the desk.
+- **One route to a hosted model:** the gateway. The earlier Claude-only adapter, its SDK dependency and `QERA_MODEL`
+  and `QERA_EFFORT` are removed; its wire-level test now covers the gateway's Anthropic adapter.
+- **Unread dots:** the zip's new header keeps the live unread dots on Messages and Notifications.
+- **QÉRA's message limit** stays on the shared rate limiter.
+
+**Found while integrating, and fixed:**
+- **Sample dates moved twice:** the zip's seed shift and this branch's `sampleDate` both applied, so "Chosen for you"
+  in the weekly brief came up empty. The duplicate is removed.
+- **Cut-off answers:** the gateway asked every provider for at most 800 tokens. Current models think, and thinking
+  counts, so answers could be cut off. Now 16,000: a ceiling, since the budget counts what is used. An Anthropic answer
+  cut off by the ceiling now fails over instead of acting on half a tool call, and a refusal is a polite answer, not an
+  empty one.
+- **Contrast:** the new menu's locked filter chips failed the contrast minimum in the light theme (they were faded).
+  They now use a dashed edge.
+- **Phone width:** the visitor's header ran 6 pixels off a 390-pixel phone screen. It now wraps.
+- **Data export:** it now includes the member's feedback on QÉRA's answers.
+
+**Evidence:**
+- API: 242 tests, all passing on PostgreSQL 16 as the restricted role with Redis and S3, including the zip's 20 QÉRA
+  tests.
+- Browser tests and accessibility pass on the merged code.
+- The screenshot baselines were recorded again for the new header, after the differences were checked: the header
+  and menu only.
+
 ## 5. Security assessment
 
 Already strong before this work (docs/SECURITY.md): two-factor for every account, hashed tokens, separate staff
