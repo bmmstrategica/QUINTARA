@@ -26,26 +26,30 @@ Approved by Quintara on 19 November 2026: the web app goes live at `quintaraapp.
 Without an API address, the build runs on sample data kept in each visitor's browser, and search engines are
 asked not to index it. Nothing reaches a database and no email is sent. Payments are added later.
 
-**In Vercel** (Add New > Project > import `bmmstrategica/quintara` from GitHub):
+**Vercel (done 19 November 2026).**
+- **Project:** `quintara-web`, in the team `quintara-web-app`.
+- **Build settings:** root `apps/web`, Node 22, `QUINTARA_DEMO_BUILD=1` for Production and Preview.
+- **Domains:** `quintaraapp.com`, with `www.quintaraapp.com` redirecting to it.
+- **First release:** uploaded from the command line; the build passed.
+- **Deployment protection:** "all except custom domains". The `*.vercel.app` addresses need a Vercel login;
+  `quintaraapp.com` is public.
 
-| Setting | Value |
-|---|---|
-| Root Directory | `apps/web` (install and build commands come from `apps/web/vercel.json`) |
-| Framework | Next.js (detected) |
-| Environment variable | `QUINTARA_DEMO_BUILD` = `1` (Production and Preview) |
-| Production branch | Settings > Environments > Production > Branch Tracking: `claude/gifted-wright-qapo61` (`main` still holds the original hand-over; merge it there later if you prefer `main`) |
-| Domains | Settings > Domains: add `quintaraapp.com` and `www.quintaraapp.com` (redirect `www` to `quintaraapp.com`) |
+**Automatic deploys from GitHub (to do).** Install the Vercel GitHub app on the `bmmstrategica` account, with access
+to the `QUINTARA` repository (https://github.com/apps/vercel). Then connect the repository in Vercel: Project >
+Settings > Git. Set the production branch: Settings > Environments > Production > Branch Tracking,
+`claude/gifted-wright-qapo61` (`main` still holds the original hand-over).
 
-**In GoDaddy** (quintaraapp.com > DNS > DNS Records). First delete GoDaddy's own `A @` ("Parked") record and its
-`CNAME www` record, then add:
+**GoDaddy** (quintaraapp.com > DNS > DNS Records). First delete the two `A @` records pointing at `3.33.130.190` and
+`15.197.148.33` (GoDaddy's parking page), and the `CNAME www` record pointing at `@`. Then add the values Vercel
+recommends for this project:
 
 | Type | Name | Value | TTL |
 |---|---|---|---|
-| A | `@` | `76.76.21.21` | 1 hour |
-| CNAME | `www` | `cname.vercel-dns.com` | 1 hour |
+| A | `@` | `216.198.79.1` | 1 hour |
+| CNAME | `www` | `deb4c1d6c12386ca.vercel-dns-017.com` | 1 hour |
 
-If Vercel's Domains page shows different values for this project, use the ones it shows. Vercel issues the
-certificate itself once the records resolve, usually within an hour.
+Vercel's older values, `A 76.76.21.21` and `CNAME cname.vercel-dns.com`, also work. Vercel issues the certificate
+itself once the records resolve, usually within an hour.
 
 **Email, for when the API goes live:** sign-in codes and notifications will be sent from `connect@quintaraapp.com`
 (`EMAIL_FROM=Quintara <connect@quintaraapp.com>`). Add `quintaraapp.com` as a domain in Resend. Resend then shows
