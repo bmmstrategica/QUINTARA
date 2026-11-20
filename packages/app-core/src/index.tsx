@@ -71,7 +71,11 @@ export function QuintaraProvider({ api, children, initialMarket = null, onMarket
 }) {
   const [state, setState] = useState<SessionState>({ status: 'loading', session: null, guest: null, secondStep: null, lapsed: null });
   const [markets, setMarkets] = useState<Market[]>([]);
-  const [authMethod, setAuthMethod] = useState<'dev' | 'code'>('dev');
+  // Until the API answers, a production build assumes production's method: a code sent by email.
+  // The bundlers (Next.js, Expo) replace process.env.NODE_ENV in the source; this package has no Node types of its own.
+  // @ts-ignore -- 'process' is typed in the apps that compile this package, not here
+  const production = process.env.NODE_ENV === 'production';
+  const [authMethod, setAuthMethod] = useState<'dev' | 'code'>(production ? 'code' : 'dev');
   useEffect(() => { let off = false; api.getAuthConfig().then((c) => { if (!off) setAuthMethod(c.method); }).catch(() => undefined); return () => { off = true; }; }, [api]);
   const [chosen, setChosen] = useState<string | null>(() => { api.setMarket(initialMarket); return initialMarket; });
   useEffect(() => { let off = false; api.listMarkets().then((list) => { if (!off) setMarkets(list); }).catch(() => undefined); return () => { off = true; }; }, [api]);

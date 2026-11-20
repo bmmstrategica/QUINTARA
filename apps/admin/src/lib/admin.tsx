@@ -110,7 +110,8 @@ export function AdminGate({ children }: { children: ReactNode }) {
     setSession(await api.getSession().catch(() => null));
   }, [api]);
   useEffect(() => { void check(); }, [check]);
-  const [method, setMethod] = useState<'dev' | 'code'>('dev');
+  // Until the API answers, a production build assumes production's method: a code sent by email.
+  const [method, setMethod] = useState<'dev' | 'code'>(process.env.NODE_ENV === 'production' ? 'code' : 'dev');
   const [codeSent, setCodeSent] = useState(false);
   const [code, setCode] = useState('');
   useEffect(() => { api.getAuthConfig().then((c) => setMethod(c.method), () => undefined); }, [api]);
