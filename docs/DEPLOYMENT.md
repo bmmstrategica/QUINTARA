@@ -51,6 +51,15 @@ recommends for this project:
 Vercel's older values, `A 76.76.21.21` and `CNAME cname.vercel-dns.com`, also work. Vercel issues the certificate
 itself once the records resolve, usually within an hour.
 
+**Admin console (deployed 20 November 2026).**
+- **Project:** `quintara-admin`, in the same team: root `apps/admin`, Node 22.
+- **API address:** `NEXT_PUBLIC_API_URL=https://api.quintaraapp.com`, the API's future address. The console works
+  once the API answers there; until then its sign-in reports that the service cannot be reached.
+- **Domain:** `admin.quintaraapp.com`. In GoDaddy, add `CNAME admin` → `1ca326493acd0b52.vercel-dns-017.com`.
+- **Search engines:** the console is not indexed.
+- **To sign in, once the API is live:** run `first-run` with `SETUP_ADMIN_EMAIL`. Then enter that email at
+  admin.quintaraapp.com, then the emailed code, then set up an authenticator app.
+
 **Email, for when the API goes live:** sign-in codes and notifications will be sent from `connect@quintaraapp.com`
 (`EMAIL_FROM=Quintara <connect@quintaraapp.com>`). Add `quintaraapp.com` as a domain in Resend. Resend then shows
 three records to add in GoDaddy:
